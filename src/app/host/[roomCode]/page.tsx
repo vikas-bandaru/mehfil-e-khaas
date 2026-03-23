@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
 import { usePlayers } from '@/hooks/usePlayers';
-import { advancePhase, assignRoles, evaluateWinCondition, resetGame, deleteRoom, startMission, GamePhase, Player, Mission } from '@/lib/game-logic';
+import { advancePhase, assignRoles, evaluateWinCondition, resetGame, deleteRoom, startMission, liquidatePot, GamePhase, Player, Mission } from '@/lib/game-logic';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -143,6 +143,16 @@ export default function HostDashboard() {
   const nightConsensusPlayers = alivePlayers.filter(p => (nightVoteTallies[p.id] || 0) === maxNightVotes && maxNightVotes > 0);
   const activeNightTargetId = nightConsensusPlayers.length === 1 ? nightConsensusPlayers[0].id : null;
 
+  const potentialWinner = useMemo(() => {
+    if (playersLoading || players.length === 0 || phase === 'lobby' || phase === 'reveal') return null;
+    const poetsCount = players.filter(p => p.role === 'sukhan_war' && (p.status === 'alive' || p.status === 'silenced')).length;
+    const plagiaristsCount = players.filter(p => p.role === 'naqal_baaz' && (p.status === 'alive' || p.status === 'silenced')).length;
+    
+    if (plagiaristsCount === 0) return 'poets';
+    if (plagiaristsCount >= poetsCount) return 'plagiarists';
+    return null;
+  }, [players, playersLoading, phase]);
+
   const hasPlayedRef = useRef(false);
 
   useEffect(() => {
@@ -200,6 +210,9 @@ export default function HostDashboard() {
             const winner = await evaluateWinCondition(roomId);
             if (winner) {
                 await supabase.from('game_rooms').update({ current_phase: 'end', winner_faction: winner }).eq('id', roomId);
+                if (winner === 'poets') {
+                    await liquidatePot(roomId);
+                }
                 return;
             }
         }
@@ -306,16 +319,28 @@ export default function HostDashboard() {
   };
 
   const handleVerifySabotage = async () => {
+    if (missionOutcome) return; // Already concluded
+    
     // Award gold to plagiarists and update pot
     const plagiarists = players.filter(p => p.role === 'naqal_baaz' && p.status === 'alive');
     for (const p of plagiarists) {
       await supabase.from('players').update({ private_gold: (p.private_gold || 0) + 500 }).eq('id', p.id);
     }
-    await supabase.from('game_rooms').update({ eidi_pot: (gameState!.eidi_pot || 0) + 1000, sabotage_triggered: false }).eq('id', roomId);
+    await supabase.from('game_rooms').update({ 
+        eidi_pot: (gameState!.eidi_pot || 0) + 1000, 
+        sabotage_triggered: false,
+        sabotage_used: true
+    }).eq('id', roomId);
+    // DO NOT set missionOutcome or clear timer here
   };
 
   const handleMissionSuccess = async () => {
-    await supabase.from('game_rooms').update({ eidi_pot: (gameState!.eidi_pot || 0) + 2000 }).eq('id', roomId);
+    if (missionOutcome) return;
+    
+    await supabase.from('game_rooms').update({ 
+        eidi_pot: (gameState!.eidi_pot || 0) + 2000,
+        mission_timer_end: null 
+    }).eq('id', roomId);
     setMissionOutcome('success');
   };
 
@@ -597,23 +622,36 @@ export default function HostDashboard() {
                             {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                         </div>
                     </div>
-                    <button onClick={handleMissionSuccess} className="btn-premium w-full bg-emerald-900/50 text-emerald-400 border-emerald-500/30 py-5 rounded-2xl">Success: Answer Matches (+₹2000)</button>
-                    <button onClick={() => setMissionOutcome('failed')} className="btn-premium w-full bg-red-900/50 text-red-400 border-red-500/30 py-5 rounded-2xl">Failed: Incorrect or Out of Time</button>
+                    <button 
+                        onClick={handleMissionSuccess} 
+                        disabled={timeLeft > 90 || !!missionOutcome}
+                        className="btn-premium w-full bg-emerald-900/50 text-emerald-400 border-emerald-500/30 py-5 rounded-2xl disabled:opacity-20"
+                    >
+                        Success: Answer Matches (+₹2000)
+                    </button>
+                    
+                    <button 
+                        onClick={() => setMissionOutcome('failed')} 
+                        disabled={timeLeft > 0 || !!missionOutcome}
+                        className="btn-premium w-full bg-red-900/50 text-red-400 border-red-500/30 py-5 rounded-2xl disabled:opacity-20"
+                    >
+                        {timeLeft > 0 ? `Solving Phase Active...` : `Failed: Incorrect or Time Out`}
+                    </button>
                     
                     <button 
                       onClick={handleVerifySabotage}
-                      disabled={!gameState.sabotage_triggered}
-                      className="btn-premium w-full bg-red-600/20 text-red-500 border-red-600/40 py-4 rounded-2xl"
+                      disabled={timeLeft > 90 || !gameState.sabotage_triggered || !!missionOutcome}
+                      className="btn-premium w-full bg-red-600/20 text-red-500 border-red-600/40 py-4 rounded-2xl disabled:opacity-20"
                     >
                       Verify Sabotage {gameState.sabotage_triggered && "(Alert!)"}
                     </button>
 
                     <button 
                         onClick={() => handleTransition('majlis')}
-                        disabled={!missionOutcome}
+                        disabled={!missionOutcome && !potentialWinner}
                         className="btn-premium w-full bg-white text-black py-6 rounded-2xl border-gray-300 mt-4 text-lg"
                     >
-                        Proceed to Majlis
+                        {potentialWinner ? 'Reveal Scores (Victory!)' : 'Proceed to Majlis'}
                     </button>
                 </div>
               )}
@@ -704,11 +742,11 @@ export default function HostDashboard() {
                     )}
 
                     <button 
-                        onClick={() => handleTransition('night')}
-                        disabled={!players.some(p => p.status === 'banished')} 
+                        onClick={() => potentialWinner ? handleTransition('end') : handleTransition('night')}
+                        disabled={!players.some(p => p.status === 'banished') && !potentialWinner} 
                         className="btn-premium w-full bg-white text-black py-6 rounded-2xl border-gray-300 mt-4 text-lg"
                     >
-                        Proceed to Night
+                        {potentialWinner ? 'Reveal Scores (Victory!)' : 'Proceed to Night'}
                     </button>
                 </div>
               )}
@@ -763,19 +801,19 @@ export default function HostDashboard() {
                             </div>
                             
                             <button 
-                                onClick={() => handleWakeUpReveal(nightVotes[0]?.target_id || null)}
-                                disabled={gameState.is_revealing}
+                                onClick={() => potentialWinner ? handleTransition('end') : handleWakeUpReveal(nightVotes[0]?.target_id || null)}
+                                disabled={gameState.is_revealing && !potentialWinner}
                                 className="btn-premium w-full bg-gold text-black py-6 rounded-2xl border-gold/50 text-lg font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(255,215,0,0.2)]"
                             >
-                                {gameState.is_revealing ? "Reveal in Progress..." : "Wake Up & Reveal"}
+                                {potentialWinner ? "Reveal Scores (Victory!)" : gameState.is_revealing ? "Reveal in Progress..." : "Wake Up & Reveal"}
                             </button>
 
                             {gameState.is_revealing && (
                                 <button 
-                                    onClick={() => handleTransition('mission')}
+                                    onClick={() => handleTransition(potentialWinner ? 'end' : 'mission')}
                                     className="btn-premium w-full bg-white text-black py-4 rounded-xl border-gray-300 animate-fade-enter-active"
                                 >
-                                    Dismiss Reveal & Next Mission
+                                    {potentialWinner ? "End Game & Reveal Scores" : "Dismiss Reveal & Next Mission"}
                                 </button>
                             )}
                         </div>

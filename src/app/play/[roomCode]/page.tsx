@@ -16,6 +16,22 @@ export default function PlayerClient() {
   const { players, loading: playersLoading } = usePlayers(roomId || '');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [showRole, setShowRole] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && roomId) {
+        const revealed = localStorage.getItem(`mehfil_role_revealed_${roomId}`);
+        if (revealed === 'true') {
+            setShowRole(true);
+        }
+    }
+  }, [roomId]);
+
+  const handleReveal = () => {
+    setShowRole(true);
+    if (typeof window !== 'undefined' && roomId) {
+        localStorage.setItem(`mehfil_role_revealed_${roomId}`, 'true');
+    }
+  };
   const [votedId, setVotedId] = useState<string | null>(null);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [nightVotes, setNightVotes] = useState<any[]>([]);
@@ -159,14 +175,34 @@ export default function PlayerClient() {
     if (error) console.error("Night vote error:", error);
   };
 
-  const RoleBadge = () => (
-    <div className={`fixed top-4 left-4 z-50 px-3 py-1.5 rounded-full border backdrop-blur-md shadow-lg animate-fade-enter-active flex items-center gap-2 ${
-        isTraitor ? 'bg-red-950/40 border-red-500/30' : 'bg-emerald-950/40 border-emerald-500/30'
-    }`}>
-        <div className={`w-2 h-2 rounded-full animate-pulse ${isTraitor ? 'bg-red-500' : 'bg-emerald-500'}`} />
-        <span className="text-[10px] uppercase font-black tracking-[0.2em] text-white/80">
-            {me.role.replace('_', ' ')}
-        </span>
+  const alivePoetsCount = players.filter(p => p.role === 'sukhan_war' && p.status === 'alive').length;
+  const potentialShare = alivePoetsCount > 0 ? Math.floor((gameState?.eidi_pot || 0) / alivePoetsCount) : 0;
+
+  const RoleBadge = () => {
+    if (!showRole) return null;
+    return (
+      <div className={`fixed top-4 left-4 z-50 px-3 py-1.5 rounded-full border backdrop-blur-md shadow-lg animate-fade-enter-active flex items-center gap-2 ${
+          isTraitor ? 'bg-red-950/40 border-red-500/30' : 'bg-emerald-950/40 border-emerald-500/30'
+      }`}>
+          <div className={`w-2 h-2 rounded-full animate-pulse ${isTraitor ? 'bg-red-500' : 'bg-emerald-500'}`} />
+          <span className="text-[10px] uppercase font-black tracking-[0.2em] text-white/80">
+              {me.role.replace('_', ' ')}
+          </span>
+      </div>
+    );
+  };
+
+  const GoldBadge = () => (
+    <div className="fixed top-4 right-4 z-50 px-4 py-2 rounded-2xl bg-black/40 border border-gold/20 backdrop-blur-md shadow-xl animate-fade-enter-active flex flex-col items-end">
+        <div className="flex items-center gap-2">
+            <span className="text-gold font-mono font-black">₹{me.private_gold}</span>
+            <span className="text-[8px] uppercase font-black text-white/40 tracking-widest">My Gold</span>
+        </div>
+        {!isTraitor && isAlive && gameState?.current_phase !== 'end' && (
+            <div className="text-[8px] text-emerald-400 font-bold uppercase tracking-tighter mt-0.5">
+                Potential Share: ₹{potentialShare}
+            </div>
+        )}
     </div>
   );
 
@@ -216,6 +252,7 @@ export default function PlayerClient() {
     return (
       <main className="min-h-screen bg-emerald-deep text-white p-6 flex flex-col items-center justify-center text-center animate-fade-enter-active">
         <div className="glass p-10 rounded-full w-48 h-48 flex items-center justify-center text-6xl mb-8 animate-pulse">🖋️</div>
+        <GoldBadge />
         <h1 className="text-4xl font-bold text-gold mb-2 serif">Welcome, {me.name}</h1>
         <p className="text-emerald-100/60 italic max-w-xs transition-all">Waiting for the Sultan to gather all the poets... ({players.length}/8)</p>
       </main>
@@ -226,12 +263,13 @@ export default function PlayerClient() {
   if (gameState?.current_phase === 'reveal') {
     return (
       <main 
-        onClick={() => setShowRole(true)}
+        onClick={handleReveal}
         className={`min-h-screen flex flex-col items-center justify-center p-6 text-center transition-colors duration-1000 ${
             showRole ? (isTraitor ? 'bg-crimson-black' : 'bg-emerald-deep') : 'bg-black'
         }`}
       >
         <RoleBadge />
+        <GoldBadge />
         {!showRole ? (
           <div className="animate-bounce-slow text-white">
             <p className="text-xl mb-4 italic opacity-50 font-serif">Tap to reveal your fate</p>
@@ -258,6 +296,7 @@ export default function PlayerClient() {
       return (
         <main className="min-h-screen bg-slate-900 text-white p-6 flex flex-col items-center justify-center text-center animate-fade-enter-active">
           <RoleBadge />
+          <GoldBadge />
           <div className="glass p-12 rounded-full w-48 h-48 flex items-center justify-center text-6xl mb-12 animate-bounce-slow border-4 border-gold/20 shadow-[0_0_50px_rgba(255,215,0,0.1)]">⚜️</div>
           <h1 className="text-4xl font-bold text-gold mb-4 serif">The Sultan is Preparing...</h1>
           <p className="text-white/40 italic max-w-xs font-serif leading-relaxed">Wait for the Sultan to announce the poetic challenge and start the mission timer.</p>
@@ -269,6 +308,7 @@ export default function PlayerClient() {
       return (
         <main className="min-h-screen bg-black text-white p-6 flex flex-col items-center justify-center text-center animate-fade-enter-active">
           <RoleBadge />
+          <GoldBadge />
           <div className="text-8xl mb-12 animate-pulse opacity-20">🌙</div>
           <h1 className="text-4xl font-black text-gray-700 serif uppercase tracking-tighter mb-4">Close Your Eyes</h1>
           <p className="text-gray-800 italic uppercase tracking-[0.3em] font-black text-xs">The Sultan is revealing the logic to the Plagiarists...</p>
@@ -282,6 +322,7 @@ export default function PlayerClient() {
     return (
       <main className="min-h-screen bg-slate-900 text-white p-6 flex flex-col justify-between overflow-hidden">
         <RoleBadge />
+        <GoldBadge />
         <div className="space-y-6">
             <header className="flex justify-between items-center text-white/40 uppercase tracking-widest text-[10px] font-bold">
                 <div className="flex items-center gap-2">
@@ -310,17 +351,28 @@ export default function PlayerClient() {
                     
                     <button 
                         onClick={handleSabotageTrigger}
-                        disabled={gameState.sabotage_triggered || isBlindfoldPhase}
-                        className={`btn-premium w-full py-6 rounded-2xl shadow-2xl transition-all ${
-                            gameState.sabotage_triggered || isBlindfoldPhase ? 'bg-gray-800 text-gray-500 border-gray-900' : 'bg-red-600 text-white border-red-500'
-                        }`}
+                        disabled={gameState.sabotage_triggered || gameState.sabotage_used || isBlindfoldPhase || !gameState.mission_timer_end}
+                        className="btn-premium w-full bg-red-600 text-white py-6 rounded-2xl border-red-400 font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] disabled:opacity-20 transition-all font-mono"
                     >
-                        {gameState.sabotage_triggered ? 'Sabotage Triggered' : isBlindfoldPhase ? 'Wait for Timer...' : 'Complete Sabotage'}
+                        {gameState.sabotage_triggered ? "Sabotage Active" : (gameState.sabotage_used ? "Sabotage Used" : (!gameState.mission_timer_end ? "Mission Concluded" : "Signal Sabotage"))}
                     </button>
+                    {gameState.sabotage_used && (
+                        <div className="mt-4 p-4 bg-red-950/20 border border-red-500/30 rounded-2xl flex justify-between items-center animate-fade-enter-active">
+                            <span className="text-red-500 font-black uppercase text-[10px] tracking-[0.2em]">Sabotage Bounty</span>
+                            <span className="text-white font-black text-xl">₹500</span>
+                        </div>
+                    )}
                     {isBlindfoldPhase && (
                         <p className="text-[10px] text-red-500/40 uppercase font-black text-center mt-4 tracking-widest">You have 60s to prepare. Assignment revealed above.</p>
                     )}
                 </section>
+            )}
+
+            {!isTraitor && gameState.sabotage_used && (
+                <div className="bg-red-950/20 border border-red-500/30 p-4 rounded-2xl flex justify-between items-center animate-pulse">
+                    <span className="text-red-500 font-bold uppercase text-[10px] tracking-widest">Security Breach Detected</span>
+                    <span className="text-white/40 text-[10px]">(-₹1000 from Pot)</span>
+                </div>
             )}
         </div>
 
@@ -339,6 +391,7 @@ export default function PlayerClient() {
     return (
         <main className="min-h-screen bg-slate-950 text-white p-6 relative overflow-hidden">
             <RoleBadge />
+            <GoldBadge />
 
             {/* Tie Protocol Messaging */}
             {gameState.tie_protocol === 'decree' ? (
@@ -411,6 +464,7 @@ export default function PlayerClient() {
     return (
       <main className="min-h-screen bg-black text-white p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
         <RoleBadge />
+        <GoldBadge />
 
         {isTraitor && isAlive ? (
             <div className="w-full space-y-8 animate-fade-enter-active">
@@ -483,9 +537,19 @@ export default function PlayerClient() {
             <p className="text-white text-xl uppercase tracking-widest font-black opacity-80 decoration-gold underline underline-offset-8">
                 The {winners} have prevailed
             </p>
-            <div className="pt-10 space-y-2">
-                <div className="text-gold font-mono text-3xl font-black">₹{me.private_gold}</div>
-                <div className="text-[10px] text-white/40 uppercase tracking-widest">Your Private Eidi Gold</div>
+            <div className="pt-10 space-y-6">
+                {winners === 'poets' && (
+                   <div className="space-y-2 pb-6 border-b border-white/10">
+                       <div className="text-gold font-mono text-3xl font-black">₹{gameState.eidi_pot}</div>
+                       <div className="text-[10px] text-white/40 uppercase tracking-widest">Total Khazana Secured</div>
+                   </div>
+                )}
+                <div className="space-y-2">
+                    <div className="text-gold font-mono text-3xl font-black">₹{me.private_gold}</div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-widest">
+                        {!isTraitor ? 'Your Share of the Eidi' : 'Total Stolen from Sabotages'}
+                    </div>
+                </div>
             </div>
         </div>
         <p className="mt-12 text-white/40 text-xs italic tracking-tighter uppercase font-bold">Wait for the Sultan to reset the Mehfil</p>
