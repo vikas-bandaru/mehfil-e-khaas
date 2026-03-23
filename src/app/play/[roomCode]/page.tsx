@@ -168,7 +168,7 @@ export default function PlayerClient() {
             <h1 className="text-7xl font-bold text-white mb-6 serif uppercase tracking-tighter">{me.role.replace('_', ' ')}</h1>
             <p className="text-white/60 mb-8 max-w-xs mx-auto text-sm italic serif">
                 {isTraitor 
-                    ? "The Shadows call. Sabotage the mission without being caught by the faithful poets."
+                    ? "The Shadows call. Sabotage the mission without being caught. Tip: You can safely check your secret assignment during the 60s Blindfold phase."
                     : "The Verse is sacred. Collaborate on missions and identify the imposters among you."}
             </p>
           </div>

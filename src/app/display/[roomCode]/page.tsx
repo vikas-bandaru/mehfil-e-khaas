@@ -153,7 +153,7 @@ export default function PublicDisplay() {
                         <div className="text-[12rem] select-none opacity-20">🌙</div>
                         <div className="space-y-6">
                             <h2 className="text-6xl lg:text-9xl font-black italic serif text-white uppercase tracking-widest">Close Your Eyes</h2>
-                            <p className="text-gold/40 text-2xl uppercase tracking-[0.5em] font-black">Plagiarists are receiving their assignments</p>
+                            <p className="text-gold/40 text-2xl uppercase tracking-[0.5em] font-black">The Mehfil is reflected in silence...</p>
                             <div className="text-8xl font-black text-gold mt-10 serif italic">
                                 {timeLeft - 90}s
                             </div>
