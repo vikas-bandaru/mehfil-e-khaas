@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useParams, useRouter } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
 import { usePlayers } from '@/hooks/usePlayers';
@@ -333,7 +335,7 @@ export default function HostDashboard() {
         <p className="text-2xl lg:text-3xl font-bold serif leading-tight">
           {phase === 'lobby' && "Wait for 8 poets. Once gathered, click 'Assign Roles'."}
           {phase === 'reveal' && "Role Reveal: Ensure total silence. Players check their fates now."}
-          {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s blindfold (Poets) / 60s prep (Plagiarists). Final 90s for all to solve. Click Begin below."}
+          {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s Blindfold Session. All poets, close your eyes and reflect. Silence for 60 seconds. Then 90s to solve."}
           {phase === 'mission' && gameState.mission_timer_end && "Mission in progress. Poets are solving. Elect a Speaker to state the final answer quietly to you."}
           {phase === 'majlis' && (
             gameState?.tie_protocol === 'revote' ? "The poets are divided. A Re-Vote is in progress. Only the tied candidates can be selected." :
