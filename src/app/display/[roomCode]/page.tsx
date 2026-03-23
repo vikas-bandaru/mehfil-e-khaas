@@ -300,6 +300,40 @@ export default function PublicDisplay() {
             </div>
         </div>
       </footer>
+      {/* CINEMATIC REVEAL: Zabaan-bandi */}
+      {gameState.is_revealing && (
+        <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-20 text-center animate-fade-enter-active">
+            {/* Background Crimson Glow */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(220,38,38,0.2)_0%,transparent_70%)] animate-pulse" />
+            
+            <div className="relative space-y-12 animate-scale-up">
+                <div className="space-y-4">
+                    <h3 className="text-red-600 font-black uppercase tracking-[1em] text-2xl animate-shimmer">Al-Shams: Breaking News</h3>
+                    <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-red-600 to-transparent" />
+                </div>
+
+                <div className="space-y-6">
+                   <h2 className="text-9xl font-black serif italic text-white uppercase tracking-tighter drop-shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+                     A Voice is Stolen
+                   </h2>
+                   <p className="text-red-500/60 text-3xl uppercase tracking-[0.5em] font-black italic">Consensus in the Darkness</p>
+                </div>
+
+                {gameState.reveal_target_id && (
+                  <div className="glass p-16 rounded-[4rem] border-4 border-red-500/30 bg-red-950/20 shadow-[0_0_100px_rgba(220,38,38,0.3)] animate-bounce-subtle">
+                      <div className="text-8xl font-black serif italic text-red-100 mb-4 uppercase">
+                        {players.find(p => p.id === gameState.reveal_target_id)?.name}
+                      </div>
+                      <p className="text-red-500 font-black text-2xl uppercase tracking-widest">Has Been Silenced</p>
+                  </div>
+                )}
+
+                <div className="pt-20 text-white/20 text-xl italic font-serif">
+                   "The Mehfil continues, but one ink-well has run dry..."
+                </div>
+            </div>
+        </div>
+      )}
     </main>
   );
 }

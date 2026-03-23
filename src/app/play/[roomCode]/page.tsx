@@ -18,6 +18,7 @@ export default function PlayerClient() {
   const [showRole, setShowRole] = useState(false);
   const [votedId, setVotedId] = useState<string | null>(null);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
+  const [nightVotes, setNightVotes] = useState<any[]>([]);
 
   useEffect(() => {
     setPlayerId(localStorage.getItem('playerId'));
@@ -97,14 +98,34 @@ export default function PlayerClient() {
     return () => clearInterval(interval);
   }, [gameState?.mission_timer_end, gameState?.current_phase]);
 
+  const me = players.find(p => p.id === playerId);
+  const isTraitor = me?.role === 'naqal_baaz';
+
+  // Realtime subscription for coordination
+  useEffect(() => {
+    if (gameState?.current_phase === 'night' && isTraitor && roomId) {
+        const fetchNightVotes = async () => {
+            const { data } = await supabase.from('night_votes').select('*').eq('room_id', roomId);
+            if (data) setNightVotes(data);
+        };
+        fetchNightVotes();
+
+        const channel = supabase.channel('night-votes-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'night_votes', filter: `room_id=eq.${roomId}` }, () => {
+                fetchNightVotes();
+            })
+            .subscribe();
+        
+        return () => { supabase.removeChannel(channel); };
+    }
+  }, [gameState?.current_phase, isTraitor, roomId]);
+
   if (gameLoading || playersLoading || !playerId) {
     return <div className="min-h-screen bg-crimson-black flex items-center justify-center text-white">Loading...</div>;
   }
 
-  const me = players.find(p => p.id === playerId);
   if (!me) return <div className="min-h-screen bg-crimson-black text-white p-10 text-center uppercase tracking-widest font-bold">Poet not found in this Mehfil.</div>;
 
-  const isTraitor = me.role === 'naqal_baaz';
   const isAlive = me.status === 'alive';
   const isBlindfoldPhase = timeLeft > 90;
 
@@ -125,6 +146,19 @@ export default function PlayerClient() {
     await supabase.from('game_rooms').update({ sabotage_triggered: true }).eq('id', roomId);
   };
 
+  const handleNightVote = async (targetId: string) => {
+    if (!roomId || !playerId || votedId === targetId) return;
+    setVotedId(targetId);
+    
+    // Using upsert for night_votes (room_id, voter_id is unique)
+    const { error } = await supabase.from('night_votes').upsert([{
+        room_id: roomId,
+        voter_id: playerId,
+        target_id: targetId
+    }]);
+    if (error) console.error("Night vote error:", error);
+  };
+
   const RoleBadge = () => (
     <div className={`fixed top-4 left-4 z-50 px-3 py-1.5 rounded-full border backdrop-blur-md shadow-lg animate-fade-enter-active flex items-center gap-2 ${
         isTraitor ? 'bg-red-950/40 border-red-500/30' : 'bg-emerald-950/40 border-emerald-500/30'
@@ -135,6 +169,47 @@ export default function PlayerClient() {
         </span>
     </div>
   );
+
+  // --- SILENCED OVERLAY (Zabaan-bandi) ---
+  if (me.status === 'silenced') {
+    return (
+      <div className="fixed inset-0 z-[100] bg-red-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active">
+          <div className="w-32 h-32 rounded-full bg-red-900/50 border-4 border-red-500 flex items-center justify-center text-6xl shadow-[0_0_50px_rgba(220,38,38,0.5)] animate-pulse mb-10">
+              🤐
+          </div>
+          <h1 className="text-5xl font-black serif italic text-white uppercase tracking-tighter mb-4 shadow-red-500/20">Zabaan-bandi</h1>
+          <p className="text-red-100 text-xl font-serif italic mb-10 leading-relaxed">
+              "The Plagiarists have found you.<br/>Your voice has been stolen by the shadows."
+          </p>
+          <div className="glass p-8 rounded-3xl border border-red-500/20 max-w-xs mx-auto">
+              <p className="text-[10px] uppercase font-black text-red-500 tracking-[0.2em] mb-2">Current Restrictions</p>
+              <ul className="text-xs text-red-200/60 space-y-2 text-left italic font-serif">
+                  <li>• You cannot speak during the Majlis.</li>
+                  <li>• You cannot vote to banish others.</li>
+                  <li>• You must remain silent until the end.</li>
+              </ul>
+          </div>
+      </div>
+    );
+  }
+
+  // --- BANISHED OVERLAY (Spirit World) ---
+  if (me.status === 'banished') {
+    return (
+      <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active">
+          <div className="w-32 h-32 rounded-full bg-zinc-900 border-4 border-zinc-700 flex items-center justify-center text-6xl shadow-[0_0_50px_rgba(255,255,255,0.05)] mb-10 opacity-40">
+              👻
+          </div>
+          <h1 className="text-5xl font-black serif italic text-zinc-500 uppercase tracking-tighter mb-4">Spirit World</h1>
+          <p className="text-zinc-400 text-xl font-serif italic mb-10 leading-relaxed max-w-sm">
+              "You have been banished from the Mehfil.<br/>You may watch, but you must remain silent."
+          </p>
+          <div className="p-6 rounded-3xl border border-white/5 bg-white/5 max-w-xs mx-auto">
+               <p className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em]">The Veil has Fallen</p>
+          </div>
+      </div>
+    );
+  }
 
   // --- LOBBY PHASE ---
   if (gameState?.current_phase === 'lobby') {
@@ -326,34 +401,70 @@ export default function PlayerClient() {
   // --- NIGHT PHASE ---
   if (gameState?.current_phase === 'night') {
     const potentialVictims = players.filter(p => p.status === 'alive' && p.role === 'sukhan_war');
+    
+    // Tally for Plagiarist coordination
+    const tally = nightVotes.reduce((acc: any, v) => {
+        acc[v.target_id] = (acc[v.target_id] || 0) + 1;
+        return acc;
+    }, {});
 
     return (
-      <main className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center text-center">
+      <main className="min-h-screen bg-black text-white p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
         <RoleBadge />
+
         {isTraitor && isAlive ? (
             <div className="w-full space-y-8 animate-fade-enter-active">
-                <h1 className="text-red-600 font-black mb-4 uppercase tracking-[0.5em] text-[10px]">Zabaan-bandi</h1>
-                <h2 className="text-4xl font-bold serif italic text-red-500">Pick a Voice to Silence</h2>
-                {votedId ? (
-                    <div className="text-gray-500 italic py-10">The order is given. Sleep now.</div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-3 w-full max-w-xs mx-auto">
-                        {potentialVictims.map(p => (
+                <div className="space-y-2">
+                    <h1 className="text-red-600 font-black uppercase tracking-[0.5em] text-[10px]">Al-Shams: Coordination</h1>
+                    <h2 className="text-4xl font-bold serif italic text-red-500">Seal a Poet's Fate</h2>
+                    <p className="text-white/20 text-[10px] uppercase tracking-widest italic">Signal your intent. Consensus is key.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 w-full max-w-sm mx-auto">
+                    {potentialVictims.map(p => {
+                        const voteCount = tally[p.id] || 0;
+                        const isMyVote = votedId === p.id;
+
+                        return (
                             <button
                                 key={p.id}
-                                onClick={() => handleVote(p.id, 'night')}
-                                className="btn-premium bg-red-950/40 border-red-900/50 p-6 rounded-2xl text-red-500 shadow-xl"
+                                onClick={() => handleNightVote(p.id)}
+                                className={`relative p-6 rounded-3xl border-2 transition-all flex justify-between items-center group ${
+                                    isMyVote 
+                                    ? 'bg-red-600/20 border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.2)]' 
+                                    : 'bg-white/5 border-white/10 hover:border-red-500/30'
+                                }`}
                             >
-                                <span className="text-xl serif italic">{p.name}</span>
+                                <div className="flex flex-col items-start translate-x-2">
+                                    <span className="text-2xl font-black serif italic text-red-100">{p.name}</span>
+                                    {isMyVote && <span className="text-[10px] uppercase font-bold text-red-500 tracking-tighter">My Selection</span>}
+                                </div>
+                                
+                                {voteCount > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex -space-x-2">
+                                            {[...Array(voteCount)].map((_, i) => (
+                                                <div key={i} className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_10px_rgba(220,38,38,1)] animate-pulse" />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </button>
-                        ))}
-                    </div>
-                )}
+                        );
+                    })}
+                </div>
+
+                <div className="glass p-6 rounded-3xl border border-red-500/10 text-white/40 italic text-xs max-w-xs mx-auto leading-relaxed">
+                    The Sultan will confirm the final silence based on your collective intention.
+                </div>
             </div>
         ) : (
-            <div className="space-y-6 opacity-30 grayscale">
-                <div className="text-6xl mb-8">🌙</div>
-                <h2 className="text-5xl font-bold text-gray-500 serif italic uppercase tracking-tighter">Sleep...</h2>
+            <div className="space-y-8 opacity-20 grayscale transition-all duration-1000 scale-90">
+                <div className="text-9xl mb-4 animate-pulse">🌙</div>
+                <div className="space-y-2">
+                    <h2 className="text-5xl font-black text-gray-400 serif italic uppercase tracking-tighter">Sleep...</h2>
+                    <p className="text-xs uppercase tracking-[0.4em] font-bold">The Mehfil is quiet</p>
+                </div>
             </div>
         )}
       </main>

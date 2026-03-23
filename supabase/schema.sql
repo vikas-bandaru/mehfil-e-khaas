@@ -75,60 +75,84 @@ INSERT INTO missions (title, public_goal, secret_sabotage) VALUES
 ('The Zamana Search', 'Order these poets chronologically: Mir Taqi Mir, Faiz Ahmed Faiz, Allama Iqbal.', 'Adamantly claim that Faiz Ahmed Faiz lived and wrote before Allama Iqbal.'),
 ('The Visual Verse', 'Decode this emoji poem and recite it: 👣 + 🏠 + 🚫 + 💔', 'Offer a completely hilarious, distracting interpretation of the emojis to waste 45 seconds of their time.');
 
--- Supabase Schema for Mehfil-e-Khaas
+-- disable RLS for game-related tables
 
--- 1. GameState Table
--- CREATE TABLE IF NOT EXISTS GameState (
---     room_code TEXT PRIMARY KEY,
---     current_phase TEXT NOT NULL DEFAULT 'Lobby', -- Lobby, Reveal, Mission, Majlis, Night, End
---     eidi_pot INTEGER DEFAULT 0,
---     active_mission_id INTEGER, -- Link to Missions table
---     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
--- );
+ALTER TABLE game_rooms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE players DISABLE ROW LEVEL SECURITY;
+ALTER TABLE missions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE votes DISABLE ROW LEVEL SECURITY;
 
--- 2. Missions Table
--- CREATE TABLE IF NOT EXISTS Missions (
---     id SERIAL PRIMARY KEY,
---     title TEXT NOT NULL,
---     public_goal TEXT NOT NULL,
---     secret_sabotage TEXT NOT NULL
--- );
+-- 1. Grant everything to the anonymous role (which the app uses)
+GRANT ALL ON TABLE game_rooms TO anon;
+GRANT ALL ON TABLE players TO anon;
+GRANT ALL ON TABLE missions TO anon;
+GRANT ALL ON TABLE votes TO anon;
 
--- 3. Players Table
--- CREATE TABLE IF NOT EXISTS Players (
---     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
---     room_code TEXT REFERENCES GameState(room_code) ON DELETE CASCADE,
---     name TEXT NOT NULL,
---     role TEXT, -- 'Sukhan-war' (Poet/Faithful) or 'Naqal-baaz' (Plagiarist/Traitor)
---     status TEXT NOT NULL DEFAULT 'Alive', -- 'Alive', 'Silenced', 'Banished'
---     private_gold INTEGER DEFAULT 0,
---     is_host BOOLEAN DEFAULT FALSE,
---     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
--- );
+-- 2. Explicitly force RLS off (again, for double-measure)
+ALTER TABLE game_rooms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE players DISABLE ROW LEVEL SECURITY;
+ALTER TABLE missions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE votes DISABLE ROW LEVEL SECURITY;
 
--- 4. Votes Table
--- CREATE TABLE IF NOT EXISTS Votes (
---     id SERIAL PRIMARY KEY,
---     room_code TEXT REFERENCES GameState(room_code) ON DELETE CASCADE,
---     phase_id TEXT NOT NULL, -- e.g., 'Majlis_Round_1'
---     voter_id UUID REFERENCES Players(id) ON DELETE CASCADE,
---     target_id UUID REFERENCES Players(id) ON DELETE CASCADE,
---     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
--- );
+-- 3. Make sure the 'authenticated' role also has access (just in case)
+GRANT ALL ON TABLE game_rooms TO authenticated;
+GRANT ALL ON TABLE players TO authenticated;
+GRANT ALL ON TABLE missions TO authenticated;
+GRANT ALL ON TABLE votes TO authenticated;
 
--- Enable Realtime for all tables
--- ALTER PUBLICATION supabase_realtime ADD TABLE GameState;
--- ALTER PUBLICATION supabase_realtime ADD TABLE Players;
--- ALTER PUBLICATION supabase_realtime ADD TABLE Missions;
--- ALTER PUBLICATION supabase_realtime ADD TABLE Votes;
+-- Add the active mission tracker to the room
+ALTER TABLE game_rooms 
+ADD COLUMN current_mission_id INTEGER REFERENCES missions(id);
 
--- Seed Missions
--- INSERT INTO Missions (title, public_goal, secret_sabotage) VALUES
--- ('The Ghalib Gambit', 'Find the second line to "Hazaron khwaishen aisi...".', 'Force the group to debate using the word "Hum" instead of "Kam".'),
--- ('The Lughat Riddle', 'Define ''Wasl'', ''Gurez'', ''Aatish-fishan''.', 'Convince the group ''Wasl'' means separation.'),
--- ('The Iqbal Insight', 'Recite a verse with the word ''Khudi''.', 'Use the word "Aina" (Mirror) twice during the search.'),
--- ('The Bait-Baazi Blitz', '3 rounds of Antakshari starting with ''Noon''.', 'Stall for 15 seconds to drain the clock.'),
--- ('The Tashreeh Trap', 'Summarize a complex Ghalib poem in English.', 'Ensure the word "Impossible" is in the final summary.'),
--- ('The Qafiya Quest', 'Find 5 verses rhyming with ''Dil''.', 'Defend a false rhyme (like ''Gul'') for 30 seconds.'),
--- ('The Zamana Search', 'Order Mir, Iqbal, and Faiz chronologically.', 'Claim Faiz lived before Iqbal.'),
--- ('The Visual Verse', 'Decode emoji poetry.', 'Give a hilarious false translation to waste 45 seconds.');
+-- truncate tables
+TRUNCATE TABLE votes, players, game_rooms RESTART IDENTITY CASCADE;
+
+-- ALTER TABLE game_rooms 
+ADD COLUMN is_dev_mode BOOLEAN DEFAULT FALSE,
+ADD COLUMN min_players_required INTEGER DEFAULT 8;
+
+-- ALTER TABLE game_rooms 
+ADD COLUMN IF NOT EXISTS current_mission_id INTEGER,
+ADD COLUMN IF NOT EXISTS sabotage_triggered BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS winner_faction TEXT,
+ADD COLUMN IF NOT EXISTS is_dev_mode BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS min_players_required INTEGER DEFAULT 8;
+
+ALTER TABLE game_rooms 
+ADD COLUMN IF NOT EXISTS mission_timer_end TIMESTAMP WITH TIME ZONE;
+
+-- 1. Add the Answer Key column
+ALTER TABLE missions 
+ADD COLUMN host_answer_key TEXT;
+
+-- 2. Backfill the exact Answer Keys for the Host to verify
+UPDATE missions SET host_answer_key = 'Answer: "...Bohat niklay mairay armaan, lekin phir bhi kam niklay."' WHERE title = 'The Ghalib Gambit';
+UPDATE missions SET host_answer_key = 'Wasl = Union/Meeting with a lover. Gurez = Avoidance/Escape. Aatish-fishan = Volcano.' WHERE title = 'The Lughat Riddle';
+UPDATE missions SET host_answer_key = 'Host Judgment: Accept any valid verse containing "Khudi" (e.g., Khudi ko kar buland itna...).' WHERE title = 'The Iqbal Insight';
+UPDATE missions SET host_answer_key = 'Host Judgment: Verify they successfully chain 3 verses starting with the correct last letter.' WHERE title = 'The Bait-Baazi Blitz';
+UPDATE missions SET host_answer_key = 'Host Judgment: Consensus required. Example: "It is difficult for everything to be easy; it is hard even for a man to be truly human."' WHERE title = 'The Tashreeh Trap';
+UPDATE missions SET host_answer_key = 'Verify 5 distinct rhymes for Dil. (e.g., Mehfil, Mushkil, Sahil, Qatil, Manzil, Bismil).' WHERE title = 'The Qafiya Quest';
+UPDATE missions SET host_answer_key = 'Correct Chronology: 1. Mir Taqi Mir (1723) -> 2. Allama Iqbal (1877) -> 3. Faiz Ahmed Faiz (1911).' WHERE title = 'The Zamana Search';
+UPDATE missions SET host_answer_key = 'Acceptable Answer: "Ishq ne Ghalib nikamma kar diya, varna hum bhi aadmi the kaam ke." or any accurate translation of the emojis.' WHERE title = 'The Visual Verse';
+
+SELECT * FROM missions;
+
+-- add rooms tie handling columns
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS tie_protocol TEXT DEFAULT 'none';
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS tied_player_ids UUID[] DEFAULT '{}';
+
+-- 1. Create Night Votes Table
+CREATE TABLE IF NOT EXISTS night_votes (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    room_id UUID REFERENCES game_rooms(id) ON DELETE CASCADE NOT NULL,
+    voter_id UUID REFERENCES players(id) ON DELETE CASCADE NOT NULL,
+    target_id UUID REFERENCES players(id) ON DELETE CASCADE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(room_id, voter_id)
+);
+ALTER TABLE night_votes DISABLE ROW LEVEL SECURITY;
+ALTER PUBLICATION supabase_realtime ADD TABLE night_votes;
+
+-- 2. Update Game Rooms for Reveal State
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS reveal_target_id UUID REFERENCES players(id);
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS is_revealing BOOLEAN DEFAULT FALSE;

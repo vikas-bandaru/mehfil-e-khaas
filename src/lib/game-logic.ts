@@ -19,6 +19,8 @@ export interface GameState {
   mission_timer_end: string | null; // ISO string
   tie_protocol?: 'none' | 'decree' | 'revote' | 'spin';
   tied_player_ids?: string[]; // Player UUIDs
+  reveal_target_id?: string | null;
+  is_revealing?: boolean;
 }
 
 export interface Player {
@@ -140,7 +142,7 @@ export const evaluateWinCondition = async (roomId: string) => {
     .from('players')
     .select('role, status')
     .eq('room_id', roomId)
-    .eq('status', 'alive');
+    .in('status', ['alive', 'silenced']);
 
   if (error || !players) return null;
 

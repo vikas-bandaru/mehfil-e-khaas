@@ -18,6 +18,7 @@ export default function HostDashboard() {
   const { players, loading: playersLoading } = usePlayers(roomId || '');
   
   const [votes, setVotes] = useState<any[]>([]);
+  const [nightVotes, setNightVotes] = useState<any[]>([]);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [missionOutcome, setMissionOutcome] = useState<'success' | 'failed' | null>(null);
   const [isVotesLocked, setIsVotesLocked] = useState(false);
@@ -89,7 +90,24 @@ export default function HostDashboard() {
       };
       fetchInitialVotes();
 
-      return () => { supabase.removeChannel(voteChannel); };
+      // Night Votes Subscription
+      const nightVoteChannel = supabase
+        .channel(`night_votes:${roomId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'night_votes', filter: `room_id=eq.${roomId}` }, () => {
+          fetchInitialNightVotes();
+        })
+        .subscribe();
+
+      const fetchInitialNightVotes = async () => {
+        const { data } = await supabase.from('night_votes').select('*').eq('room_id', roomId);
+        if (data) setNightVotes(data);
+      };
+      fetchInitialNightVotes();
+
+      return () => { 
+        supabase.removeChannel(voteChannel); 
+        supabase.removeChannel(nightVoteChannel);
+      };
     }
   }, [roomId]);
 
@@ -112,6 +130,18 @@ export default function HostDashboard() {
   const maxVotes = Math.max(...Object.values(voteTallies), 0);
   const mostVotedPlayers = alivePlayers.filter(p => (voteTallies[p.id] || 0) === maxVotes && maxVotes > 0);
   const isTie = isVotesLocked && mostVotedPlayers.length > 1 && (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol);
+
+  const nightVoteTallies = useMemo(() => {
+    const tallies: Record<string, number> = {};
+    nightVotes.forEach(v => {
+      tallies[v.target_id] = (tallies[v.target_id] || 0) + 1;
+    });
+    return tallies;
+  }, [nightVotes]);
+
+  const maxNightVotes = Math.max(...Object.values(nightVoteTallies), 0);
+  const nightConsensusPlayers = alivePlayers.filter(p => (nightVoteTallies[p.id] || 0) === maxNightVotes && maxNightVotes > 0);
+  const activeNightTargetId = nightConsensusPlayers.length === 1 ? nightConsensusPlayers[0].id : null;
 
   const hasPlayedRef = useRef(false);
 
@@ -177,11 +207,19 @@ export default function HostDashboard() {
         // Phase Cleanup
         if (nextPhase === 'majlis' || nextPhase === 'night' || nextPhase === 'mission') {
             await supabase.from('votes').delete().eq('room_id', roomId);
+            await supabase.from('night_votes').delete().eq('room_id', roomId);
             setVotes([]);
+            setNightVotes([]);
             setIsVotesLocked(false);
             setBanishedPlayerId(null);
             setMissionOutcome(null);
             setSilenceConfirmed(false);
+            
+            // Clear reveal state when moving to a new phase
+            await supabase.from('game_rooms').update({ 
+                is_revealing: false, 
+                reveal_target_id: null 
+            }).eq('id', roomId);
         }
 
         await advancePhase(roomId, nextPhase);
@@ -246,8 +284,25 @@ export default function HostDashboard() {
   };
 
   const handleSilence = async (targetId: string) => {
+    if (!roomId) return;
     await supabase.from('players').update({ status: 'silenced' }).eq('id', targetId);
+    await supabase.from('night_votes').delete().eq('room_id', roomId);
     setSilenceConfirmed(true);
+  };
+
+  const handleWakeUpReveal = async (targetId: string | null) => {
+    if (!roomId) return;
+    // 1. Set reveal state
+    await supabase.from('game_rooms').update({ 
+        is_revealing: true, 
+        reveal_target_id: targetId 
+    }).eq('id', roomId);
+
+    // 2. Evaluate win condition
+    const winner = await evaluateWinCondition(roomId);
+    
+    // 3. Transition to mission after delay (handled by Host clicking button again or auto)
+    // For now, let's keep it manual so Host can control the cinematic length.
   };
 
   const handleVerifySabotage = async () => {
@@ -343,7 +398,11 @@ export default function HostDashboard() {
             gameState?.tie_protocol === 'decree' ? "Sultan's Decree: You must hold the final power to banish a poet." :
             "Majlis Open: Debate and cast votes to banish suspects."
           )}
-          {phase === 'night' && "Tell everyone to close their eyes. Waiting for Plagiarists to select their victim..."}
+          {phase === 'night' && (
+            silenceConfirmed 
+            ? "Poet silenced. Ready to announce the results to the room." 
+            : "Tell everyone to close their eyes. Waiting for Plagiarists to coordinate their target..."
+          )}
           {phase === 'end' && "The Mehfil is over. Reveal the identities and announce the winners!"}
         </p>
       </section>
@@ -385,7 +444,7 @@ export default function HostDashboard() {
                         <span className="text-sm font-bold opacity-60">(Start Timer & Reveal Logic)</span>
                     </button>
                     <p className="text-center text-gold/40 text-[10px] uppercase font-black mt-6 tracking-widest">
-                        Clicking this will reveal the objective to all players and start the 2-minute countdown.
+                        Clicking this will reveal the objective to all players and start the 2.5-minute countdown.
                     </p>
                 </div>
               )}
@@ -427,7 +486,7 @@ export default function HostDashboard() {
                     <div className="space-y-3">
                         {alivePlayers.map(p => {
                             const count = voteTallies[p.id] || 0;
-                            const percentage = (count / alivePlayers.length) * 100;
+                            const percentage = (count / (alivePlayers.length || 1)) * 100;
                             return (
                                 <div key={p.id} className="space-y-1">
                                     <div className="flex justify-between text-[10px] uppercase font-bold">
@@ -656,31 +715,71 @@ export default function HostDashboard() {
 
               {phase === 'night' && (
                 <div className="space-y-4">
-                    <p className="text-center text-[10px] text-gray-500 italic mb-4 tracking-widest uppercase font-black">Waiting for Plagiarist choice...</p>
-                    {votes.find(v => v.round_id === 99) ? (
-                        <div className="p-6 bg-red-950/40 rounded-2xl border border-red-500/30 text-center">
-                            <p className="text-[10px] uppercase text-red-500 font-black mb-4 tracking-widest">Plagiarist Target Identified</p>
-                            <p className="text-3xl font-bold serif mb-6">{alivePlayers.find(p => p.id === votes.find(v => v.round_id === 99).target_id)?.name}</p>
-                            
-                            <button 
-                              onClick={() => handleSilence(votes.find(v => v.round_id === 99).target_id)} 
-                              disabled={silenceConfirmed}
-                              className="btn-premium w-full bg-red-600 py-4 rounded-xl border-red-500"
-                            >
-                              {silenceConfirmed ? "Silence Confirmed" : "Confirm Silence"}
-                            </button>
+                    <div className="bg-black/40 p-6 rounded-2xl border border-white/10">
+                        <h3 className="text-xs uppercase font-bold text-gray-500 mb-4 tracking-widest text-center">Plagiarist Coordination</h3>
+                        <div className="space-y-3">
+                            {alivePoets.map(p => {
+                                const count = nightVoteTallies[p.id] || 0;
+                                const isConsensus = activeNightTargetId === p.id;
+                                const percentage = (count / (alivePlagiarists.length || 1)) * 100;
+                                
+                                return (
+                                    <div key={p.id} className="space-y-1">
+                                        <div className="flex justify-between text-[10px] uppercase font-bold">
+                                            <span className={isConsensus ? 'text-red-500' : ''}>{p.name} {isConsensus && '🎯'}</span>
+                                            <span>{count} Votes</span>
+                                        </div>
+                                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                            <div className={`h-full transition-all duration-500 ${isConsensus ? 'bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]' : 'bg-gray-600'}`} style={{ width: `${percentage}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {!silenceConfirmed ? (
+                        <div className="space-y-3">
+                             <p className="text-[10px] text-center text-red-500/60 uppercase font-black tracking-widest animate-pulse">
+                                {nightConsensusPlayers.length > 1 ? "Tie detected! Choose between the tied suspects." : "Waiting for Consensus..."}
+                             </p>
+                             
+                             <div className="grid grid-cols-1 gap-2">
+                                {(nightConsensusPlayers.length > 1 ? nightConsensusPlayers : (activeNightTargetId ? [players.find(p => p.id === activeNightTargetId)!] : [])).map(p => (
+                                    <button 
+                                        key={p.id}
+                                        onClick={() => handleSilence(p.id)}
+                                        className="btn-premium w-full bg-red-600 py-4 rounded-xl border-red-500 text-sm font-bold uppercase tracking-widest"
+                                    >
+                                        Silence {p.name}
+                                    </button>
+                                ))}
+                             </div>
                         </div>
                     ) : (
-                        <div className="animate-pulse text-center p-12 text-gray-600 italic border-2 border-dashed border-white/5 rounded-2xl">Darkness falls...</div>
-                    )}
+                        <div className="space-y-4 animate-scale-up">
+                            <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-2xl text-center">
+                                <p className="text-[10px] uppercase text-emerald-500 font-black tracking-widest">Silence Executed</p>
+                            </div>
+                            
+                            <button 
+                                onClick={() => handleWakeUpReveal(nightVotes[0]?.target_id || null)}
+                                disabled={gameState.is_revealing}
+                                className="btn-premium w-full bg-gold text-black py-6 rounded-2xl border-gold/50 text-lg font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(255,215,0,0.2)]"
+                            >
+                                {gameState.is_revealing ? "Reveal in Progress..." : "Wake Up & Reveal"}
+                            </button>
 
-                    <button 
-                      onClick={() => handleTransition('mission')}
-                      disabled={!silenceConfirmed}
-                      className="btn-premium w-full bg-white text-black py-6 rounded-2xl border-gray-300 mt-4 text-lg"
-                    >
-                      Wake Up & Reveal
-                    </button>
+                            {gameState.is_revealing && (
+                                <button 
+                                    onClick={() => handleTransition('mission')}
+                                    className="btn-premium w-full bg-white text-black py-4 rounded-xl border-gray-300 animate-fade-enter-active"
+                                >
+                                    Dismiss Reveal & Next Mission
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
               )}
 
