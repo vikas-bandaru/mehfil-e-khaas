@@ -413,20 +413,20 @@ export default function HostDashboard() {
       <section className="bg-gold text-crimson-black p-6 rounded-2xl shadow-xl border-4 border-gold/50 animate-bounce-subtle">
         <h3 className="text-xs uppercase font-black tracking-widest mb-1 opacity-70">Sultan's Teleprompter</h3>
         <p className="text-2xl lg:text-3xl font-bold serif leading-tight">
-          {phase === 'lobby' && "Wait for 8 poets. Once gathered, click 'Assign Roles'."}
-          {phase === 'reveal' && "Role Reveal: Ensure total silence. Players check their fates now."}
-          {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s Blindfold Session. All poets, close your eyes and reflect. Silence for 60 seconds. Then 90s to solve."}
+          {phase === 'lobby' && "Wait for at least 4 poets. Once gathered, click 'Assign Roles'."}
+          {phase === 'reveal' && "Role Reveal: Tell everyone to look at their screens. One or more among them are Plagiarists. They must keep it secret!"}
+          {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s Blindfold Session. Tell everyone to close their eyes. Plagiarists, check your assignments. Silence for 60s!"}
           {phase === 'mission' && gameState.mission_timer_end && "Mission in progress. Poets are solving. Elect a Speaker to state the final answer quietly to you."}
           {phase === 'majlis' && (
             gameState?.tie_protocol === 'revote' ? "The poets are divided. A Re-Vote is in progress. Only the tied candidates can be selected." :
             gameState?.tie_protocol === 'spin' ? "The Pen of Fate will decide the Plagiarist." :
             gameState?.tie_protocol === 'decree' ? "Sultan's Decree: You must hold the final power to banish a poet." :
-            "Majlis Open: Debate and cast votes to banish suspects."
+            "Majlis Open: Debate and cast votes to banish suspects. Lead the debate!"
           )}
           {phase === 'night' && (
             silenceConfirmed 
             ? "Poet silenced. Ready to announce the results to the room." 
-            : "Tell everyone to close their eyes. Waiting for Plagiarists to coordinate their target..."
+            : "Shhh! Tell everyone to close their eyes. Wait for the Plagiarists to vote on their phones. Once identified, click Confirm."
           )}
           {phase === 'end' && "The Mehfil is over. Reveal the identities and announce the winners!"}
         </p>
@@ -595,13 +595,14 @@ export default function HostDashboard() {
 
                   <button 
                     onClick={handleAssignRoles}
-                    disabled={players.length < (gameState?.is_dev_mode ? (gameState?.min_players_required ?? 1) : 8)}
-                    className="btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg"
+                    disabled={players.length < (gameState?.is_dev_mode ? (gameState?.min_players_required ?? 1) : 4)}
+                    className="btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all"
                   >
-                    {players.length < (gameState?.is_dev_mode ? (gameState?.min_players_required ?? 1) : 8) 
-                      ? `Need ${ (gameState?.is_dev_mode ? (gameState?.min_players_required ?? 1) : 8) } Players` 
-                      : 'Assign Roles & Start'}
+                    Assign Roles & Start
                   </button>
+                  {players.length < 4 && !gameState?.is_dev_mode && (
+                    <p className="text-center text-red-500 text-[10px] uppercase font-black tracking-widest mt-4 animate-pulse">Minimum 4 players required to start the Mehfil.</p>
+                  )}
                 </div>
               )}
 
@@ -803,7 +804,7 @@ export default function HostDashboard() {
                             <button 
                                 onClick={() => potentialWinner ? handleTransition('end') : handleWakeUpReveal(nightVotes[0]?.target_id || null)}
                                 disabled={gameState.is_revealing && !potentialWinner}
-                                className="btn-premium w-full bg-gold text-black py-6 rounded-2xl border-gold/50 text-lg font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(255,215,0,0.2)]"
+                                className="btn-premium w-full bg-gold text-black py-6 rounded-2xl border-gold/50 text-lg font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(255,215,0,0.2)] active:scale-95 transition-all"
                             >
                                 {potentialWinner ? "Reveal Scores (Victory!)" : gameState.is_revealing ? "Reveal in Progress..." : "Wake Up & Reveal"}
                             </button>

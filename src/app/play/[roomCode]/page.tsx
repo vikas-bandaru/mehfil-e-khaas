@@ -137,10 +137,26 @@ export default function PlayerClient() {
   }, [gameState?.current_phase, isTraitor, roomId]);
 
   if (gameLoading || playersLoading || !playerId) {
-    return <div className="min-h-screen bg-crimson-black flex items-center justify-center text-white">Loading...</div>;
+    return (
+      <div className="h-screen w-full bg-crimson-black flex flex-col items-center justify-center text-white overflow-hidden">
+        <div className="w-16 h-16 border-4 border-gold/20 border-t-gold rounded-full animate-spin mb-4"></div>
+        <p className="text-gold/60 text-xs uppercase font-black tracking-widest animate-pulse font-serif italic">Entering the Mehfil...</p>
+      </div>
+    );
   }
 
-  if (!me) return <div className="min-h-screen bg-crimson-black text-white p-10 text-center uppercase tracking-widest font-bold">Poet not found in this Mehfil.</div>;
+  if (!me) return (
+    <div className="h-screen w-full bg-crimson-black text-white p-10 flex flex-col items-center justify-center text-center overflow-hidden">
+        <h1 className="text-4xl font-black serif text-gold mb-4 italic uppercase tracking-tighter shadow-gold/10">Poet not found.</h1>
+        <p className="text-white/40 mb-8 italic serif">Your seat in this Mehfil seems to have vanished.</p>
+        <button 
+            onClick={() => window.location.href = '/'}
+            className="btn-premium bg-gold text-black py-4 px-8 rounded-2xl active:scale-95 transition-all text-xs font-black uppercase tracking-widest"
+        >
+            Return to Entrance
+        </button>
+    </div>
+  );
 
   const isAlive = me.status === 'alive';
   const isBlindfoldPhase = timeLeft > 90;
@@ -209,7 +225,7 @@ export default function PlayerClient() {
   // --- SILENCED OVERLAY (Zabaan-bandi) ---
   if (me.status === 'silenced') {
     return (
-      <div className="fixed inset-0 z-[100] bg-red-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active">
+      <div className="fixed inset-0 z-[100] bg-red-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active overflow-hidden touch-none h-screen w-full">
           <div className="w-32 h-32 rounded-full bg-red-900/50 border-4 border-red-500 flex items-center justify-center text-6xl shadow-[0_0_50px_rgba(220,38,38,0.5)] animate-pulse mb-10">
               🤐
           </div>
@@ -232,7 +248,7 @@ export default function PlayerClient() {
   // --- BANISHED OVERLAY (Spirit World) ---
   if (me.status === 'banished') {
     return (
-      <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active">
+      <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active overflow-hidden touch-none h-screen w-full">
           <div className="w-32 h-32 rounded-full bg-zinc-900 border-4 border-zinc-700 flex items-center justify-center text-6xl shadow-[0_0_50px_rgba(255,255,255,0.05)] mb-10 opacity-40">
               👻
           </div>
@@ -250,11 +266,11 @@ export default function PlayerClient() {
   // --- LOBBY PHASE ---
   if (gameState?.current_phase === 'lobby') {
     return (
-      <main className="min-h-screen bg-emerald-deep text-white p-6 flex flex-col items-center justify-center text-center animate-fade-enter-active">
+      <main className="h-screen w-full overflow-hidden flex flex-col items-center justify-center text-center bg-emerald-deep text-white p-6 animate-fade-enter-active touch-none">
         <div className="glass p-10 rounded-full w-48 h-48 flex items-center justify-center text-6xl mb-8 animate-pulse">🖋️</div>
         <GoldBadge />
         <h1 className="text-4xl font-bold text-gold mb-2 serif">Welcome, {me.name}</h1>
-        <p className="text-emerald-100/60 italic max-w-xs transition-all">Waiting for the Sultan to gather all the poets... ({players.length}/8)</p>
+        <p className="text-emerald-100/60 italic max-w-xs transition-all">Waiting for the Sultan to gather all the poets... ({players.length}/4)</p>
       </main>
     );
   }
@@ -352,7 +368,7 @@ export default function PlayerClient() {
                     <button 
                         onClick={handleSabotageTrigger}
                         disabled={gameState.sabotage_triggered || gameState.sabotage_used || isBlindfoldPhase || !gameState.mission_timer_end}
-                        className="btn-premium w-full bg-red-600 text-white py-6 rounded-2xl border-red-400 font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] disabled:opacity-20 transition-all font-mono"
+                        className="btn-premium w-full bg-red-600 text-white py-6 rounded-2xl border-red-400 font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] disabled:opacity-20 active:scale-95 transition-all font-mono min-h-[44px]"
                     >
                         {gameState.sabotage_triggered ? "Sabotage Active" : (gameState.sabotage_used ? "Sabotage Used" : (!gameState.mission_timer_end ? "Mission Concluded" : "Signal Sabotage"))}
                     </button>
@@ -436,7 +452,7 @@ export default function PlayerClient() {
                                     <button
                                         key={p.id}
                                         onClick={() => handleVote(p.id)}
-                                        className="btn-premium bg-white/5 p-8 rounded-[2rem] border-2 border-white/5 flex justify-between items-center group active:scale-95 transition-all"
+                                        className="btn-premium bg-white/5 p-8 rounded-[2rem] border-2 border-white/5 flex justify-between items-center group active:scale-95 transition-all min-h-[44px]"
                                     >
                                         <span className="text-2xl font-black serif italic text-emerald-100 group-hover:text-gold transition-colors">{p.name}</span>
                                         <span className="text-gold text-xs font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Banish 🖋️</span>
@@ -483,7 +499,7 @@ export default function PlayerClient() {
                             <button
                                 key={p.id}
                                 onClick={() => handleNightVote(p.id)}
-                                className={`relative p-6 rounded-3xl border-2 transition-all flex justify-between items-center group ${
+                                className={`relative p-6 rounded-3xl border-2 active:scale-95 transition-all flex justify-between items-center group min-h-[44px] ${
                                     isMyVote 
                                     ? 'bg-red-600/20 border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.2)]' 
                                     : 'bg-white/5 border-white/10 hover:border-red-500/30'

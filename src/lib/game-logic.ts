@@ -199,10 +199,15 @@ export const assignRoles = async (roomId: string, manualTraitorCount?: number) =
 
   const shuffled = [...players].sort(() => Math.random() - 0.5);
   
-  // Dynamic Role Assignment (Default: 1 for 4-7, 2 for 8+)
-  let traitorCount = manualTraitorCount ?? (players.length >= 8 ? 2 : 1);
+  // Dynamic Role Assignment: 4-7 (1), 8-12 (2), 13+ (3)
+  let traitorCount = manualTraitorCount ?? 1;
+  if (!manualTraitorCount) {
+    if (players.length >= 13) traitorCount = 3;
+    else if (players.length >= 8) traitorCount = 2;
+    else traitorCount = 1;
+  }
   
-  // Safety check: traitorCount cannot exceed player count
+  // Safety check: traitorCount cannot exceed player count - 1
   traitorCount = Math.min(traitorCount, players.length - 1);
   if (traitorCount < 1) traitorCount = 1;
 

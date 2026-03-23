@@ -16,8 +16,8 @@ The application is split into three primary entry points:
 
 ## 3. Persistent State Management
 - **Database:** Used for cross-client critical data: `current_phase`, `eidi_pot`, `player_status`, and `votes`.
-- **LocalStorage:** Used for client-specific persistent data: `playerName`, `playerId`, and `mehfil_role_revealed`.
-- **Decision:** Role reveal status is stored in `localStorage` to ensure a player's identity remains visible to them even after page refreshes or phase changes, while maintaining the "Tap to Reveal" secrecy rule.
+- **Decision:** Role reveal status and session identity (`playerId`, `roomCode`) are stored in `localStorage`.
+- **Rationale:** This ensures that if a player refreshes their browser, the `PlayerClient` can immediately recover their identity and active role without requiring a re-join. This is critical for maintaining game flow during time-sensitive missions or voting phases.
 
 ## 4. Mission Control & Interlocking
 - **Decision:** Implemented a "One-Click" state machine for mission outcomes.
@@ -33,6 +33,11 @@ The application is split into three primary entry points:
 - **Spirit World:** A desaturated, zinc-themed UI state for banished players to prevent them from interacting while allowing them to spectate.
 - **Zabaan-bandi:** A restrictive overlay for silenced players that enforces the "social death" mechanic of the night phase.
 - **Tie-Breaking Protocols:** Three distinct manual and randomized protocols (`Decree`, `Re-vote`, `Spin the Pen`) to ensure the game never stalls.
+
+## 7. Public Readiness & Mobile Optimization
+- **Button Standards:** All primary action buttons (Vote, Sabotage, Silence) are enforced with a `min-h-[44px]` touch target to ensure accessibility on small mobile screens.
+- **Visual Feedback:** Buttons use `active:scale-95` to provide tactile confirmation of actions, reducing accidental double-clicks.
+- **Layout Stability:** The `PlayerClient` uses `h-screen overflow-hidden` and `touch-none` overlays for restricted states (Silenced, Banished) to prevent "pull-to-refresh" or accidental scrolling from breaking the immersion.
 
 ## 7. Database Schema Queries (PostgreSQL)
 The following SQL queries were executed to evolve the database schema to support the Mehfil's game mechanics:
@@ -66,7 +71,11 @@ CREATE TABLE IF NOT EXISTS night_votes (
 ## 8. Core JavaScript Utilities (`src/lib/game-logic.ts`)
 We encapsulated the game's state transitions and calculations into reusable utility functions:
 
-- `assignRoles(roomId, manualCount)`: Dynamically calculates the number of Plagiarists based on room size (1 for < 8 players, 2 for 8+) and shuffles the `players` table to assign roles.
+- `assignRoles(roomId, manualCount)`: Dynamically calculates the number of Plagiarists based on room size:
+    - 4-7 Players: 1 Plagiarist
+    - 8-12 Players: 2 Plagiarists
+    - 13+ Players: 3 Plagiarists
+  It then shuffles the `players` table and assigns roles accordingly.
 - `startMission(roomId)`: Sets the `mission_timer_end` to now + 150 seconds and resets mission-specific flags like `sabotage_triggered` and `sabotage_used`.
 - `evaluateWinCondition(roomId)`: Checks the remaining alive players. Returns `'poets'` if no Plagiarists remain, or `'plagiarists'` if they equal or outnumber the Poets.
 - `liquidatePot(roomId)`: A critical end-game function that divides the `eidi_pot` among surviving Poets and updates their `private_gold` (Private Khazana).
