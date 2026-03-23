@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useParams } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
 import { usePlayers } from '@/hooks/usePlayers';
