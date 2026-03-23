@@ -17,6 +17,8 @@ export interface GameState {
   is_dev_mode: boolean;
   min_players_required: number;
   mission_timer_end: string | null; // ISO string
+  tie_protocol?: 'none' | 'decree' | 'revote' | 'spin';
+  tied_player_ids?: string[]; // Player UUIDs
 }
 
 export interface Player {

@@ -38,6 +38,45 @@ export default function PlayerClient() {
     }
   }, [gameState?.current_mission_id]);
 
+  // Reset local voted state if votes are cleared in DB (for Re-Vote)
+  useEffect(() => {
+    if (roomId && playerId && gameState?.current_phase === 'majlis') {
+        const checkVote = async () => {
+            const { data } = await supabase
+                .from('votes')
+                .select('*')
+                .eq('room_id', roomId)
+                .eq('voter_id', playerId)
+                .maybeSingle();
+            
+            if (!data) {
+                setVotedId(null);
+            } else {
+                setVotedId(data.target_id);
+            }
+        };
+        checkVote();
+
+        // Subscribe to vote changes for this user
+        const channel = supabase.channel(`user-votes:${playerId}`)
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'votes', 
+                filter: `voter_id=eq.${playerId}` 
+            }, (payload) => {
+                if (payload.eventType === 'DELETE') {
+                    setVotedId(null);
+                } else if (payload.new) {
+                    setVotedId((payload.new as any).target_id);
+                }
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }
+  }, [roomId, playerId, gameState?.current_phase, gameState?.tie_protocol]);
+
   const [timeLeft, setTimeLeft] = useState(0);
 
   useEffect(() => {
@@ -220,39 +259,64 @@ export default function PlayerClient() {
 
   // --- MAJLIS (VOTING) PHASE ---
   if (gameState?.current_phase === 'majlis') {
-    const aliveTargets = players.filter(p => p.status === 'alive' && p.id !== me.id);
-
     return (
-      <main className="min-h-screen bg-slate-950 text-white p-6">
-        <RoleBadge />
-        <header className="mb-10 animate-fade-enter-active">
-              <h1 className="text-4xl font-bold text-gold mb-2 serif tracking-tighter italic">The Majlis</h1>
-              <p className="text-gray-400 text-xs italic">Debate. Discuss. Choose who to banish from the Mehfil.</p>
-          </header>
+        <main className="min-h-screen bg-slate-950 text-white p-6 relative overflow-hidden">
+            <RoleBadge />
 
-          {votedId ? (
-              <div className="text-center py-20 grayscale opacity-40">
-                  <div className="text-6xl mb-6">🗳️</div>
-                  <h2 className="text-2xl font-bold text-gold serif italic">Vote Cast</h2>
-              </div>
-          ) : (
-              <div className="grid grid-cols-1 gap-3 overflow-y-auto max-h-[60vh]">
-                  {isAlive ? (
-                      aliveTargets.map(p => (
-                          <button
-                              key={p.id}
-                              onClick={() => handleVote(p.id)}
-                              className="btn-premium bg-white/5 p-6 rounded-2xl flex justify-between items-center text-left border-white/10 group"
-                          >
-                              <span className="font-bold text-xl serif group-hover:text-gold transition-colors">{p.name}</span>
-                              <span className="text-gold text-[10px] font-black uppercase tracking-widest opacity-60">Banish</span>
-                          </button>
-                      ))
-                  ) : (
-                      <div className="text-center p-10 text-gray-700 italic border border-white/5 rounded-2xl">The banished cannot vote.</div>
-                  )}
-              </div>
-          )}
+            {/* Tie Protocol Messaging */}
+            {gameState.tie_protocol === 'decree' ? (
+                <div className="flex flex-col items-center justify-center h-full space-y-8 animate-fade-enter-active">
+                     <div className="text-9xl animate-pulse">👑</div>
+                     <div className="text-center space-y-4">
+                        <h2 className="text-4xl font-black serif text-gold italic">Sultan's Decree</h2>
+                        <p className="text-white/40 uppercase tracking-[0.3em] font-black text-xs">The Sultan is deliberating. Maintain silence.</p>
+                     </div>
+                </div>
+            ) : gameState.tie_protocol === 'spin' ? (
+                <div className="flex flex-col items-center justify-center h-full space-y-8 animate-fade-enter-active">
+                     <div className="text-9xl animate-spin-slow">✒️</div>
+                     <div className="text-center space-y-4">
+                        <h2 className="text-4xl font-black serif text-red-500 italic">The Pen of Fate</h2>
+                        <p className="text-white/40 uppercase tracking-[0.3em] font-black text-xs">The Ink of destiny is spinning...</p>
+                     </div>
+                </div>
+            ) : (
+                <div className="space-y-8 animate-fade-enter-active">
+                    <header className="text-center space-y-2">
+                        <h2 className="text-5xl font-black text-gold serif italic tracking-tighter uppercase">
+                            {gameState.tie_protocol === 'revote' ? 'Re-Vote!' : 'The Majlis'}
+                        </h2>
+                        <p className="text-white/40 uppercase tracking-[0.4em] font-black text-[10px]">
+                            {gameState.tie_protocol === 'revote' ? 'Choose carefully between the tied suspects' : 'Debate and Cast Your Vote'}
+                        </p>
+                    </header>
+
+                    {votedId ? (
+                        <div className="glass p-12 rounded-[3rem] border-2 border-gold/20 text-center space-y-6 animate-scale-up grayscale opacity-50">
+                            <div className="text-6xl">🗳️</div>
+                            <h3 className="text-2xl font-bold serif text-gold italic">Your Fate is Cast</h3>
+                            <p className="text-white/40 text-xs uppercase tracking-widest">Wait for the Sultan's final judgment.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-3">
+                            {players
+                                .filter(p => p.status === 'alive' && p.id !== playerId)
+                                .filter(p => !gameState.tie_protocol || gameState.tie_protocol !== 'revote' || gameState.tied_player_ids?.includes(p.id))
+                                .map(p => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => handleVote(p.id)}
+                                        className="btn-premium bg-white/5 p-8 rounded-[2rem] border-2 border-white/5 flex justify-between items-center group active:scale-95 transition-all"
+                                    >
+                                        <span className="text-2xl font-black serif italic text-emerald-100 group-hover:text-gold transition-colors">{p.name}</span>
+                                        <span className="text-gold text-xs font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Banish 🖋️</span>
+                                    </button>
+                                ))
+                            }
+                        </div>
+                    )}
+                </div>
+            )}
         </main>
     );
   }
