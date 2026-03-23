@@ -109,6 +109,7 @@ export default function HostDashboard() {
 
   const maxVotes = Math.max(...Object.values(voteTallies), 0);
   const mostVotedPlayers = alivePlayers.filter(p => (voteTallies[p.id] || 0) === maxVotes && maxVotes > 0);
+  const isTie = isVotesLocked && mostVotedPlayers.length > 1 && (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol);
 
   const hasPlayedRef = useRef(false);
 
@@ -207,9 +208,39 @@ export default function HostDashboard() {
     await supabase.from('game_rooms').update({ min_players_required: count }).eq('id', roomId);
   };
 
-  const handleBanish = async () => {
-    if (!banishedPlayerId) return;
-    await supabase.from('players').update({ status: 'banished' }).eq('id', banishedPlayerId);
+  const handleBanish = async (playerId?: string) => {
+    const targetId = playerId || banishedPlayerId;
+    if (!targetId) return;
+    await supabase.from('players').update({ status: 'banished' }).eq('id', targetId);
+    // Reset tie protocol after banishment
+    await supabase.from('game_rooms').update({ tie_protocol: 'none', tied_player_ids: [] }).eq('id', roomId);
+  };
+
+  const handleTieProtocolSelect = async (protocol: 'decree' | 'revote' | 'spin') => {
+    if (!roomId) return;
+    await supabase.from('game_rooms').update({ 
+        tie_protocol: protocol, 
+        tied_player_ids: mostVotedPlayers.map(p => p.id) 
+    }).eq('id', roomId);
+
+    if (protocol === 'revote') {
+        // Reset votes for revote
+        await supabase.from('votes').delete().eq('room_id', roomId);
+        setVotes([]);
+        setIsVotesLocked(false);
+    }
+  };
+
+  const [isSpinning, setIsSpinning] = useState(false);
+  const handleSpinThePen = async () => {
+    setIsSpinning(true);
+    // Simulation for Host view, real sync via Supabase
+    setTimeout(async () => {
+        const tiedIds = gameState?.tied_player_ids || [];
+        const winnerId = tiedIds[Math.floor(Math.random() * tiedIds.length)];
+        await handleBanish(winnerId);
+        setIsSpinning(false);
+    }, 3000);
   };
 
   const handleSilence = async (targetId: string) => {
@@ -304,7 +335,12 @@ export default function HostDashboard() {
           {phase === 'reveal' && "Role Reveal: Ensure total silence. Players check their fates now."}
           {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s blindfold (Poets) / 60s prep (Plagiarists). Final 90s for all to solve. Click Begin below."}
           {phase === 'mission' && gameState.mission_timer_end && "Mission in progress. Poets are solving. Elect a Speaker to state the final answer quietly to you."}
-          {phase === 'majlis' && "Majlis Open: Debate and cast votes to banish suspects."}
+          {phase === 'majlis' && (
+            gameState?.tie_protocol === 'revote' ? "The poets are divided. A Re-Vote is in progress. Only the tied candidates can be selected." :
+            gameState?.tie_protocol === 'spin' ? "The Pen of Fate will decide the Plagiarist." :
+            gameState?.tie_protocol === 'decree' ? "Sultan's Decree: You must hold the final power to banish a poet." :
+            "Majlis Open: Debate and cast votes to banish suspects."
+          )}
           {phase === 'night' && "Tell everyone to close their eyes. Waiting for Plagiarists to select their victim..."}
           {phase === 'end' && "The Mehfil is over. Reveal the identities and announce the winners!"}
         </p>
@@ -531,7 +567,7 @@ export default function HostDashboard() {
                         {isVotesLocked ? "Votes Locked" : "Lock Votes & Reveal"}
                     </button>
                     
-                    {isVotesLocked && (
+                    {isVotesLocked && !isTie && gameState?.tie_protocol === 'none' && (
                         <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
                             <p className="text-[10px] text-center text-gray-500 uppercase font-black tracking-widest">Select Player to Banish</p>
                             {mostVotedPlayers.map(p => (
@@ -540,11 +576,68 @@ export default function HostDashboard() {
                                 </button>
                             ))}
                             <button 
-                                onClick={handleBanish}
+                                onClick={() => handleBanish()}
                                 disabled={!banishedPlayerId}
                                 className="btn-premium w-full bg-red-600 py-4 rounded-xl border-red-500 disabled:opacity-20"
                             >
                                 Confirm Banishment
+                            </button>
+                        </div>
+                    )}
+
+                    {isTie && (
+                        <div className="p-6 bg-gold/10 rounded-3xl border-2 border-gold/40 animate-scale-up space-y-6">
+                            <div className="text-center">
+                                <h3 className="text-gold font-black uppercase tracking-[0.2em] text-xs mb-2">Tie Detected!</h3>
+                                <p className="text-white/60 text-[10px] italic">Choose the Law of the Land</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                <button onClick={() => handleTieProtocolSelect('decree')} className="btn-premium w-full bg-gold text-black py-4 rounded-xl font-bold">🔱 Sultan's Decree</button>
+                                <button onClick={() => handleTieProtocolSelect('revote')} className="btn-premium w-full bg-white/10 text-gold border-gold/40 py-4 rounded-xl font-bold">🗳️ The Re-Vote</button>
+                                <button onClick={() => handleTieProtocolSelect('spin')} className="btn-premium w-full bg-red-950/40 text-red-500 border-red-900/50 py-4 rounded-xl font-bold">✒️ Spin the Pen</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {gameState?.tie_protocol === 'decree' && (
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
+                            <p className="text-[10px] text-center text-gold uppercase font-black tracking-widest animate-pulse">Establishing the Decree...</p>
+                            {gameState.tied_player_ids?.map(id => {
+                                const player = players.find(p => p.id === id);
+                                return (
+                                    <button key={id} onClick={() => handleBanish(id)} className="btn-premium w-full bg-red-600/20 border-red-500/40 text-red-500 py-4 rounded-xl font-bold">
+                                        Banish {player?.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {gameState?.tie_protocol === 'spin' && (
+                         <div className="p-6 bg-red-950/40 rounded-3xl border-2 border-red-900 animate-pulse text-center space-y-6">
+                            <h3 className="text-red-500 font-black uppercase tracking-widest text-xs">Pen of Fate</h3>
+                            <button 
+                                onClick={handleSpinThePen} 
+                                disabled={isSpinning}
+                                className={`w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl mx-auto transition-all ${isSpinning ? 'animate-spin border-red-500' : 'border-red-900 bg-red-600/20'}`}
+                            >
+                                ✒️
+                            </button>
+                            <p className="text-red-100/60 text-[10px] uppercase font-black">{isSpinning ? 'The spin has begun...' : 'Click to Spin!'}</p>
+                         </div>
+                    )}
+
+                    {gameState?.tie_protocol === 'revote' && (
+                        <div className="p-6 bg-emerald-950/40 rounded-3xl border-2 border-emerald-500/40 text-center space-y-3">
+                            <h3 className="text-emerald-500 font-black uppercase tracking-widest text-xs animate-pulse">Re-Vote in Progress</h3>
+                            <p className="text-white/40 text-[10px]">Tied: {gameState.tied_player_ids?.map(id => players.find(p => p.id === id)?.name).join(' vs ')}</p>
+                            <div className="text-2xl font-black tabular-nums">{votes.length} / {alivePlayers.length}</div>
+                            <button 
+                                onClick={() => setIsVotesLocked(true)}
+                                disabled={votes.length < alivePlayers.length || isVotesLocked}
+                                className="btn-premium w-full bg-emerald-600 py-4 rounded-xl text-sm"
+                            >
+                                Lock Re-Votes
                             </button>
                         </div>
                     )}

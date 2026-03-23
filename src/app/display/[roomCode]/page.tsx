@@ -180,16 +180,78 @@ export default function PublicDisplay() {
 
         {phase === 'majlis' && (
             <div className="space-y-10 animate-fade-enter-active w-full max-w-6xl">
-                <h2 className="text-7xl lg:text-9xl font-black italic serif text-gold tracking-tighter uppercase italic drop-shadow-2xl">The Majlis</h2>
-                <p className="text-2xl text-white/50 uppercase tracking-[0.4em] font-black underline underline-offset-8 decoration-gold/30">Debate. Suspect. Banish.</p>
-                <div className="grid grid-cols-4 gap-6 pt-20">
-                    {players.filter(p => p.status === 'alive').map(p => (
-                        <div key={p.id} className="glass p-8 rounded-3xl border border-white/10 shadow-xl hover:border-gold/30 transition-all">
-                            <div className="text-2xl font-bold serif italic text-emerald-100">{p.name}</div>
-                            <div className="text-[10px] uppercase tracking-widest text-white/20 mt-2 font-black">Present</div>
+                {!gameState.tie_protocol || gameState.tie_protocol === 'none' ? (
+                    <>
+                        <h2 className="text-7xl lg:text-9xl font-black italic serif text-gold tracking-tighter uppercase italic drop-shadow-2xl">The Majlis</h2>
+                        <p className="text-2xl text-white/50 uppercase tracking-[0.4em] font-black underline underline-offset-8 decoration-gold/30">Debate. Suspect. Banish.</p>
+                        <div className="grid grid-cols-4 gap-6 pt-20">
+                            {players.filter(p => p.status === 'alive').map(p => (
+                                <div key={p.id} className="glass p-8 rounded-3xl border border-white/10 shadow-xl hover:border-gold/30 transition-all">
+                                    <div className="text-2xl font-bold serif italic text-emerald-100">{p.name}</div>
+                                    <div className="text-[10px] uppercase tracking-widest text-white/20 mt-2 font-black">Present</div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
+                    </>
+                ) : gameState.tie_protocol === 'decree' ? (
+                    <div className="space-y-12 animate-scale-up py-20">
+                         <div className="text-[12rem] animate-pulse drop-shadow-[0_0_80px_rgba(255,215,0,0.3)]">👑</div>
+                         <div className="space-y-6">
+                            <h2 className="text-6xl lg:text-8xl font-black italic serif text-gold uppercase tracking-tighter">The Sultan is Deliberating</h2>
+                            <p className="text-white/40 text-2xl uppercase tracking-[0.5em] font-black">Hold your breath. The final decree is being established.</p>
+                         </div>
+                    </div>
+                ) : gameState.tie_protocol === 'revote' ? (
+                    <div className="space-y-12 animate-fade-enter-active py-20">
+                         <h2 className="text-7xl lg:text-9xl font-black italic serif text-red-500 uppercase tracking-tighter animate-pulse">TIE DETECTED</h2>
+                         <p className="text-white/60 text-3xl uppercase tracking-[0.3em] font-black">Final Deliberation: {gameState.tied_player_ids?.map(id => players.find(p => p.id === id)?.name).join(' vs ')}</p>
+                         <div className="flex justify-center gap-10 pt-10">
+                            {gameState.tied_player_ids?.map(id => {
+                                const p = players.find(p => p.id === id);
+                                return (
+                                    <div key={id} className="glass p-12 rounded-[3rem] border-4 border-gold/20 bg-gold/5 min-w-[300px]">
+                                        <div className="text-5xl font-black serif italic text-white mb-4">{p?.name}</div>
+                                        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                            <div className="h-full bg-gold animate-shimmer w-full" />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                         </div>
+                    </div>
+                ) : gameState.tie_protocol === 'spin' ? (
+                    <div className="space-y-12 animate-fade-enter-active py-10 flex flex-col items-center">
+                         <h2 className="text-6xl lg:text-8xl font-black italic serif text-red-500 uppercase tracking-tighter">The Pen of Fate</h2>
+                         
+                         <div className="relative w-[600px] h-[600px] flex items-center justify-center">
+                            {/* Tied Players in a Circle */}
+                            {gameState.tied_player_ids?.map((id, i) => {
+                                const p = players.find(p => p.id === id);
+                                const angle = (i * 360) / (gameState.tied_player_ids?.length || 1);
+                                return (
+                                    <div 
+                                        key={id} 
+                                        className="absolute transform -translate-x-1/2 -translate-y-1/2 glass p-8 rounded-2xl border-2 border-white/10 min-w-[180px]"
+                                        style={{ 
+                                            left: `${50 + 40 * Math.cos((angle * Math.PI) / 180)}%`,
+                                            top: `${50 + 40 * Math.sin((angle * Math.PI) / 180)}%`
+                                        }}
+                                    >
+                                        <div className="text-2xl font-black serif italic text-white">{p?.name}</div>
+                                    </div>
+                                );
+                            })}
+
+                            {/* The Spinning Pen */}
+                            <div className="w-64 h-64 relative animate-spin-slow duration-[3000ms]">
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-48 bg-gradient-to-b from-red-600 via-gold to-transparent rounded-full shadow-[0_0_30px_rgba(255,0,0,0.5)]">
+                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl">✒️</div>
+                                </div>
+                            </div>
+                         </div>
+                         <p className="text-white/40 text-2xl uppercase tracking-[0.5em] font-black animate-pulse">Fate is deciding the Plagiarist...</p>
+                    </div>
+                ) : null}
             </div>
         )}
 
