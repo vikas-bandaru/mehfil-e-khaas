@@ -266,15 +266,65 @@ export default function PublicDisplay() {
         )}
 
         {phase === 'end' && (
-            <div className="space-y-12 animate-scale-up">
-                <div className="text-[12rem] mb-10 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
+            <div className="space-y-12 animate-scale-up w-full max-w-6xl">
+                <div className="text-[12rem] mb-1 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
                 <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
                   {gameState.winner_faction === 'poets' ? 'The Poets Have Prevailed' : 'The Plagiarists Rule the City'}
                 </h2>
-                <div className="flex justify-center gap-24 items-end pt-10">
-                    <div className="text-center group">
-                        <div className="text-9xl font-black text-white italic serif group-hover:text-gold transition-colors duration-500">₹{gameState.eidi_pot}</div>
-                        <div className="text-sm uppercase tracking-[0.3em] text-gold/60 font-black mt-4 border-t border-gold/20 pt-4">Total Eidi Pot Distributed</div>
+
+                {gameState.winner_faction === 'poets' && (
+                    <div className="mt-8 space-y-4 animate-fade-enter-active">
+                        <p className="text-4xl font-serif text-white/80 italic leading-relaxed">
+                            "Saff-e-Matam Na Bichao Ke Sukhan Zinda Hai,<br/>
+                            Ahl-e-Zauq Dekh Lo, Har Lafz-e-Kohan Zinda Hai."
+                        </p>
+                        <p className="text-sm uppercase tracking-[0.4em] text-gold/40 font-black">
+                            (Do not mourn, for the Word is alive; O people of taste, see that every ancient verse still lives.)
+                        </p>
+                    </div>
+                )}
+                
+                <div className="grid grid-cols-1 gap-4 pt-10">
+                    <div className="flex justify-between items-end border-b border-gold/10 pb-4 mb-4">
+                        <h3 className="text-gold/40 uppercase tracking-[0.5em] font-black text-xs">Final Wealth Distribution</h3>
+                        <div className="text-right">
+                           <div className="text-[10px] text-white/40 uppercase font-black tracking-widest">Total Eidi Pot</div>
+                           <div className="text-4xl font-black text-white italic serif">₹{gameState.eidi_pot}</div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        {[...players].sort((a, b) => (b.private_gold || 0) - (a.private_gold || 0)).map((p, i) => {
+                            const isWinner = p.role === 'sukhan_war' && p.status === 'alive';
+                            const isPlagiarist = p.role === 'naqal_baaz';
+                            
+                            return (
+                                <div key={p.id} className={`glass flex items-center justify-between p-6 rounded-2xl border transition-all duration-700 ${isWinner ? 'bg-gold/10 border-gold/40 scale-105 shadow-[0_0_30px_rgba(255,215,0,0.2)]' : 'border-white/5 opacity-60'}`}>
+                                    <div className="flex items-center gap-6">
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl ${i === 0 ? 'bg-gold text-black' : 'bg-white/10 text-white'}`}>
+                                            #{i + 1}
+                                        </div>
+                                        <div className="text-left">
+                                            <div className={`text-4xl font-black serif italic ${isWinner ? 'text-white' : 'text-white/60'}`}>{p.name}</div>
+                                            <div className="flex gap-3 items-center mt-1">
+                                                <span className={`text-[10px] uppercase font-black tracking-widest ${isPlagiarist ? 'text-red-500' : 'text-emerald-500'}`}>{p.role.replace('_', ' ')}</span>
+                                                <span className="w-1 h-1 rounded-full bg-white/20" />
+                                                <span className="text-[10px] uppercase font-black tracking-widest text-white/40">{p.status}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="text-right">
+                                        <div className={`text-5xl font-black italic serif ${isWinner ? 'text-gold' : isPlagiarist && (p.private_gold || 0) > 0 ? 'text-red-500' : 'text-white/40'}`}>
+                                            ₹{p.private_gold || 0}
+                                        </div>
+                                        <div className="text-[10px] uppercase font-black text-white/20 tracking-tighter mt-1">
+                                            {isWinner ? 'Total Eidi + Share' : isPlagiarist ? 'Stolen Black Money' : 'Khazana Secured'}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>

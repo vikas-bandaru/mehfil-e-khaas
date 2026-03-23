@@ -146,7 +146,7 @@ export default function PlayerClient() {
   const isBlindfoldPhase = timeLeft > 90;
 
   const handleVote = async (targetId: string, roundType: 'majlis' | 'night' = 'majlis') => {
-    if (votedId || !roomId) return;
+    if (votedId || !roomId || me.status !== 'alive') return;
     setVotedId(targetId);
     
     await supabase.from('votes').insert([{

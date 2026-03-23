@@ -179,10 +179,8 @@ export const resetGame = async (roomId: string) => {
     .eq('room_id', roomId);
 
   // 3. Clear votes
-  await supabase
-    .from('votes')
-    .delete()
-    .eq('room_id', roomId);
+  await supabase.from('votes').delete().eq('room_id', roomId);
+  await supabase.from('night_votes').delete().eq('room_id', roomId);
 };
 
 export const deleteRoom = async (roomId: string) => {
