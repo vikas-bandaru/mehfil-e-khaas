@@ -178,3 +178,9 @@ CREATE POLICY "Allow public delete on night_votes" ON "public"."night_votes" FOR
 
 -- 4. MISSIONS: Read-only for everyone
 CREATE POLICY "Allow public select on missions" ON "public"."missions" FOR SELECT TO anon USING (true);
+
+-- 1. Track total wealth across the entire gathering
+ALTER TABLE players ADD COLUMN IF NOT EXISTS gathering_gold INTEGER DEFAULT 0 NOT NULL;
+
+-- 2. Store the final pot of the last game for verification
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS last_game_pot INTEGER DEFAULT 0 NOT NULL;

@@ -28,8 +28,10 @@ The application is split into three primary entry points:
     - `sabotage_used` (Flag) prevents Plagiarists from signaling twice in one mission, even if the Host clears the visual alert.
 
 ## 5. End-Game Wealth Distribution
-- **Decision:** Automated "Liquidation" function.
-- **Rationale:** Upon a Poet victory, the `liquidatePot` utility fetches all surviving Poets and distributes the `eidi_pot` equally into their `private_gold`. This ensures the reward feels tangible and reflects the "collective security" theme.
+- **Decision:** Automated "Liquidation" function with session persistence.
+- **Rationale:** Upon victory, the `liquidatePot` utility fetch winners and distributes the `eidi_pot`. Crucially, this is immediately added to the player's `gathering_gold` (Total Session Wealth), and the `eidi_pot` is reset to 0 to prevent double-liquidation. The final pot value is stored in `last_game_pot` for collective verification.
+- **Decision:** "Payout Phase" for Gathering Conclusion.
+- **Rationale:** To facilitate a proper ending to a multi-game session, a dedicated `payout` phase was added. This phase locks the room and displays a cumulative leaderboard from `gathering_gold`, ensuring players see their total earnings across all rounds played during the gathering.
 
 ## 6. Thematic Components
 - **Spirit World:** A desaturated, zinc-themed UI state for banished players to prevent them from interacting while allowing them to spectate.
@@ -46,26 +48,25 @@ The application is split into three primary entry points:
 - **Rationale**: Uses a deep charcoal (`#050505`) and gold (`#D4AF37`) palette with Lora (Serif) typography to evoke a high-stakes, historical manuscript aesthetic.
 - **Interaction**: Integrated `IntersectionObserver` on the landing page to automatically expand the rules section once the CTA enters the viewport, ensuring a premium onboarding flow.
 
-## 9. Database Schema Queries (PostgreSQL)
-The following SQL queries were executed to evolve the database schema to support the Mehfil's game mechanics:
+### Database Schema Repair (Run in Supabase SQL Editor)
+Execute the following block to ensure all required columns exist for the gathering system and sabotage mechanics:
 
-### Game Rooms Table Updates
 ```sql
--- Track cinematic reveal state
+-- 1. Game Rooms: Sabotage & Multi-Game State
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS sabotage_used BOOLEAN DEFAULT FALSE;
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS sabotage_triggered BOOLEAN DEFAULT FALSE;
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS last_game_pot INTEGER DEFAULT 0 NOT NULL;
+
+-- 2. Game Rooms: Reveal & Tie-Breaking
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS is_revealing BOOLEAN DEFAULT FALSE;
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS reveal_target_id UUID REFERENCES players(id);
-
--- Implement Tie-Breaking Protocols
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS tie_protocol TEXT DEFAULT 'none';
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS tied_player_ids UUID[];
 
--- Mission Sabotage Interlocking
-ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS sabotage_used BOOLEAN DEFAULT FALSE;
-```
+-- 3. Players: Gathering Wealth
+ALTER TABLE players ADD COLUMN IF NOT EXISTS gathering_gold INTEGER DEFAULT 0 NOT NULL;
 
-### Votes & Night Activity
-```sql
--- Create Night Votes for Plagiarist coordination
+-- 4. Night Coordination Table
 CREATE TABLE IF NOT EXISTS night_votes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID REFERENCES game_rooms(id) ON DELETE CASCADE,
@@ -74,7 +75,6 @@ CREATE TABLE IF NOT EXISTS night_votes (
     UNIQUE(room_id, voter_id)
 );
 ```
-
 ## 10. Core JavaScript Utilities (`src/lib/game-logic.ts`)
 We encapsulated the game's state transitions and calculations into reusable utility functions:
 
@@ -86,5 +86,5 @@ We encapsulated the game's state transitions and calculations into reusable util
 - `startMission(roomId)`: Sets the `mission_timer_end` to now + 150 seconds and resets mission-specific flags like `sabotage_triggered` and `sabotage_used`.
 - `evaluateWinCondition(roomId)`: Checks the remaining alive players. Returns `'poets'` if no Plagiarists remain, or `'plagiarists'` if they equal or outnumber the Poets.
 - `liquidatePot(roomId)`: A critical end-game function that divides the `eidi_pot` among surviving Poets and updates their `private_gold` (Private Khazana).
-- `resetGame(roomId)`: Restores the room to the lobby phase while maintaining player wealth (`private_gold`) for cumulative session reveals.
+- `resetGame(roomId)`: Restores the room to the lobby phase while maintaining session wealth (`gathering_gold`) but resetting current game earnings (`private_gold`) to 0.
 - `advancePhase(roomId, nextPhase)`: Orchestrates global phase transitions and mission selection.

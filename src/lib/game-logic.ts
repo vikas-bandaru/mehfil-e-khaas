@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 // Updated to match PostgreSQL Enums in lowercase
-export type GamePhase = 'lobby' | 'reveal' | 'mission' | 'majlis' | 'night' | 'end';
+export type GamePhase = 'lobby' | 'reveal' | 'mission' | 'majlis' | 'night' | 'end' | 'payout';
 export type PlayerRole = 'sukhan_war' | 'naqal_baaz';
 export type PlayerStatus = 'alive' | 'silenced' | 'banished';
 
@@ -21,6 +21,7 @@ export interface GameState {
   tied_player_ids?: string[]; // Player UUIDs
   reveal_target_id?: string | null;
   is_revealing?: boolean;
+  last_game_pot?: number;
   sabotage_used?: boolean;
 }
 
@@ -31,6 +32,7 @@ export interface Player {
   role: PlayerRole;
   status: PlayerStatus;
   private_gold: number;
+  gathering_gold?: number;
   joined_at: string;
 }
 
@@ -169,32 +171,77 @@ export const evaluateWinCondition = async (roomId: string) => {
 };
 
 export const resetGame = async (roomId: string) => {
-  // 1. Reset room
-  await supabase
+  console.log("🛠️ Starting Game Reset for Room:", roomId);
+  
+  const fullUpdate = { 
+    current_phase: 'lobby', 
+    eidi_pot: 0, 
+    current_round: 0,
+    current_mission_id: null,
+    winner_faction: null,
+    mission_timer_end: null,
+    sabotage_used: false,
+    sabotage_triggered: false,
+    tie_protocol: 'none',
+    tied_player_ids: [],
+    is_revealing: false,
+    reveal_target_id: null
+  };
+
+  // 1. Try Full Reset
+  let { error: roomError } = await supabase
     .from('game_rooms')
-    .update({ 
-      current_phase: 'lobby', 
-      eidi_pot: 0, 
-      current_round: 1, 
-      current_mission_id: null,
-      winner_faction: null,
-      mission_timer_end: null,
-      sabotage_used: false,
-      sabotage_triggered: false,
-      tie_protocol: 'none',
-      tied_player_ids: []
-    })
+    .update(fullUpdate)
     .eq('id', roomId);
 
+  // Fallback: If sabotage columns are missing, try minimal reset
+  if (roomError && roomError.message?.includes('column')) {
+    console.warn("⚠️ Full reset failed (likely missing columns), attempting minimal reset...");
+    const { error: minError } = await supabase
+      .from('game_rooms')
+      .update({
+        current_phase: 'lobby',
+        eidi_pot: 0,
+        current_round: 0,
+        current_mission_id: null,
+        winner_faction: null,
+        mission_timer_end: null,
+        tie_protocol: 'none',
+        tied_player_ids: [],
+        is_revealing: false,
+        reveal_target_id: null
+      })
+      .eq('id', roomId);
+    roomError = minError;
+  }
+
+  if (roomError) {
+    console.error("❌ Room Reset Failed:", roomError);
+    throw roomError;
+  }
+
   // 2. Reset players
-  await supabase
+  const { error: playerError } = await supabase
     .from('players')
-    .update({ role: 'sukhan_war', status: 'alive' })
+    .update({ 
+      status: 'alive', 
+      private_gold: 0 
+      // Note: We DO NOT reset role here, to avoid triggering evaluateWinCondition('poets') 
+      // if any hook runs before the phase transition is fully processed.
+      // Roles are re-assigned in handleAssignRoles anyway.
+    })
     .eq('room_id', roomId);
+
+  if (playerError) {
+    console.error("❌ Player Reset Failed:", playerError);
+    throw playerError;
+  }
 
   // 3. Clear votes
   await supabase.from('votes').delete().eq('room_id', roomId);
   await supabase.from('night_votes').delete().eq('room_id', roomId);
+  
+  console.log("✅ Game Reset Complete");
 };
 
 export const deleteRoom = async (roomId: string) => {
@@ -242,10 +289,21 @@ export const assignRoles = async (roomId: string, manualTraitorCount?: number) =
       throw error;
     }
   }
-  console.log("Role assignment complete.");
+  
+  // Set round to 1 for the new game and clear all mission-related state
+  await supabase.from('game_rooms').update({ 
+    current_round: 1,
+    current_mission_id: null,
+    mission_timer_end: null,
+    sabotage_used: false,
+    sabotage_triggered: false,
+    winner_faction: null
+  }).eq('id', roomId);
+  
+  console.log("Roles assigned, round set to 1, and mission state cleared.");
 };
 
-export const liquidatePot = async (roomId: string) => {
+export const liquidatePot = async (roomId: string, forcedWinner?: 'poets' | 'plagiarists') => {
   // 1. Fetch room data (pot and faction)
   const { data: room, error: roomError } = await supabase
     .from('game_rooms')
@@ -253,28 +311,53 @@ export const liquidatePot = async (roomId: string) => {
     .eq('id', roomId)
     .single();
 
-  if (roomError || !room) throw roomError;
-  if (room.winner_faction !== 'poets') return; // Only poets distribute the collective pot
+  const winner = forcedWinner || room?.winner_faction;
+  if (roomError || !room || !winner) return;
 
-  const finalPot = room.eidi_pot;
+  const finalPot = room.eidi_pot || 0;
+  if (finalPot <= 0) return;
   
-  // 2. Fetch alive poets (winners)
-  const { data: winners, error: winnersError } = await supabase
+  // 2. Fetch target players based on victory rule
+  let query = supabase.from('players').select('id, private_gold').eq('room_id', roomId);
+  
+  if (winner === 'poets') {
+    // Poets Win: Share among ALIVE poets only
+    query = query.eq('role', 'sukhan_war').eq('status', 'alive');
+  } else {
+    // Plagiarists Win: Share among ALL plagiarists
+    query = query.eq('role', 'naqal_baaz');
+  }
+
+  const { data: winners, error: winnersError } = await query;
+  if (winnersError || !winners || winners.length === 0) return;
+
+  const share = Math.floor(finalPot / winners.length);
+  for (const winnerObj of winners) {
+    await supabase
+      .from('players')
+      .update({ private_gold: (winnerObj.private_gold || 0) + share })
+      .eq('id', winnerObj.id);
+  }
+
+  // 3. Clear the pot to prevent double liquidation
+  await supabase
+
+  // 4. Tally ALL players current game gains into their gathering total
+  const { data: allPlayers } = await supabase
     .from('players')
-    .select('id, private_gold')
-    .eq('room_id', roomId)
-    .eq('role', 'sukhan_war')
-    .eq('status', 'alive');
+    .select('id, private_gold, gathering_gold')
+    .eq('room_id', roomId);
 
-  if (winnersError || !winners) throw winnersError;
-
-  if (winners.length > 0) {
-    const share = Math.floor(finalPot / winners.length);
-    for (const winner of winners) {
-      await supabase
-        .from('players')
-        .update({ private_gold: (winner.private_gold || 0) + share })
-        .eq('id', winner.id);
+  if (allPlayers) {
+    for (const p of allPlayers) {
+      await supabase.from('players').update({ 
+        gathering_gold: (p.gathering_gold || 0) + (p.private_gold || 0) 
+      }).eq('id', p.id);
     }
   }
+
+  await supabase
+    .from('game_rooms')
+    .update({ eidi_pot: 0, last_game_pot: finalPot })
+    .eq('id', roomId);
 };
