@@ -11,20 +11,26 @@ import { Mission } from '@/lib/game-logic';
 
 export default function PlayerClient() {
   const { roomCode } = useParams() as { roomCode: string };
-  const { gameState, loading: gameLoading } = useGameState(roomCode);
+  const { gameState, loading: gameLoading, setGameState } = useGameState(roomCode);
   const roomId = gameState?.id;
   const { players, loading: playersLoading } = usePlayers(roomId || '');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [showRole, setShowRole] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && roomId) {
+    if (typeof window !== 'undefined' && roomId && gameState) {
+        // Point 3: Clear revealed flag if it's the start of a new game (Round 1, Lobby/Reveal)
+        if (gameState.current_round === 1 && (gameState.current_phase === 'lobby' || gameState.current_phase === 'reveal')) {
+            localStorage.removeItem(`mehfil_role_revealed_${roomId}`);
+            setShowRole(false);
+        }
+
         const revealed = localStorage.getItem(`mehfil_role_revealed_${roomId}`);
         if (revealed === 'true') {
             setShowRole(true);
         }
     }
-  }, [roomId]);
+  }, [roomId, gameState?.current_round, gameState?.current_phase]);
 
   const handleReveal = () => {
     setShowRole(true);
@@ -174,8 +180,16 @@ export default function PlayerClient() {
   };
 
   const handleSabotageTrigger = async () => {
-    if (!roomId) return;
-    await supabase.from('game_rooms').update({ sabotage_triggered: true }).eq('id', roomId);
+    if (!roomId || gameState?.sabotage_triggered) return;
+    
+    // Optimistic UI for the Plagiarist
+    setGameState(prev => prev ? { ...prev, sabotage_triggered: true } : null);
+    
+    const { error } = await supabase.from('game_rooms').update({ sabotage_triggered: true }).eq('id', roomId);
+    if (error) {
+        console.error("Sabotage Failed:", error);
+        setGameState(prev => prev ? { ...prev, sabotage_triggered: false } : null);
+    }
   };
 
   const handleNightVote = async (targetId: string) => {
@@ -287,9 +301,16 @@ export default function PlayerClient() {
         <RoleBadge />
         <GoldBadge />
         {!showRole ? (
-          <div className="animate-bounce-slow text-white">
-            <p className="text-xl mb-4 italic opacity-50 font-serif">Tap to reveal your fate</p>
-            <div className="w-20 h-20 border-2 border-white/20 rounded-full mx-auto flex items-center justify-center font-bold text-2xl">?</div>
+          <div className="animate-scale-up space-y-8">
+            <h1 className="text-4xl font-black text-gold serif italic uppercase tracking-tighter">Your Fate Awaits</h1>
+            <p className="text-white/40 italic font-serif">A role has been assigned to you by the Sultan.</p>
+            <button 
+              onClick={handleReveal}
+              className="w-44 h-44 rounded-full border-4 border-gold shadow-[0_0_60px_rgba(212,175,55,0.4)] flex flex-col items-center justify-center group active:scale-90 transition-all bg-background/80 backdrop-blur-md mx-auto animate-bounce-subtle"
+            >
+              <span className="text-7xl group-hover:scale-125 transition-transform duration-500 text-gold font-serif">?</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gold/80 mt-2">Tap to Reveal</span>
+            </button>
           </div>
         ) : (
           <div className="animate-scale-up">
@@ -353,24 +374,38 @@ export default function PlayerClient() {
             {activeMission ? (
               <section className="glass p-8 rounded-3xl border border-white/10 shadow-2xl bg-white/5 animate-fade-enter-active">
                   <h3 className="text-gold uppercase text-[10px] tracking-widest mb-2 font-black">Current Objective</h3>
-                  <h2 className="text-3xl font-bold mb-4 serif leading-tight italic">{activeMission.title}</h2>
-                  <p className="text-gray-400 text-sm font-serif">"{activeMission.public_goal}"</p>
+                  {/* Point 4: Hide details from Poets during blindfold */}
+                  {isBlindfoldPhase && !isTraitor ? (
+                      <div className="py-10 text-center space-y-4">
+                          <div className="text-4xl animate-pulse grayscale opacity-20">📜</div>
+                          <p className="text-gold/40 text-xs uppercase font-black tracking-widest italic animate-shimmer">Deciphering the Script...</p>
+                      </div>
+                  ) : (
+                      <>
+                        <h2 className="text-3xl font-bold mb-4 serif leading-tight italic">{activeMission.title}</h2>
+                        <p className="text-gray-400 text-sm font-serif">"{activeMission.public_goal}"</p>
+                      </>
+                  )}
               </section>
             ) : (
               <div className="p-10 text-center text-gray-500 italic">Waiting for the Sultan to announce the logic...</div>
             )}
 
             {isTraitor && isAlive && activeMission && (
-                <section className="bg-red-950/40 border-2 border-red-500/30 p-8 rounded-3xl animate-fade-enter-active">
+                <section className="bg-red-950/40 border-2 border-500/30 p-8 rounded-3xl animate-fade-enter-active">
                     <h3 className="text-red-500 uppercase text-[10px] tracking-widest mb-4 font-black">Secret Sabotage</h3>
                     <p className="text-red-100 text-xl font-serif italic mb-10">"{activeMission.secret_sabotage}"</p>
                     
                     <button 
                         onClick={handleSabotageTrigger}
                         disabled={gameState.sabotage_triggered || gameState.sabotage_used || isBlindfoldPhase || !gameState.mission_timer_end}
-                        className="btn-premium w-full bg-red-600 text-white py-6 rounded-2xl border-red-400 font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] disabled:opacity-20 active:scale-95 transition-all font-mono min-h-[44px]"
+                        className={`btn-premium w-full py-6 rounded-2xl font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] transition-all font-mono min-h-[44px] ${
+                            gameState.sabotage_triggered 
+                            ? 'bg-red-900/40 text-red-500/50 border-red-900/20' 
+                            : 'bg-red-600 text-white border-red-400 active:scale-95'
+                        }`}
                     >
-                        {gameState.sabotage_triggered ? "Sabotage Active" : (gameState.sabotage_used ? "Sabotage Used" : (!gameState.mission_timer_end ? "Mission Concluded" : "Signal Sabotage"))}
+                        {gameState.sabotage_triggered ? "⚡ Sabotage Active" : (isBlindfoldPhase ? "Eyes Closed..." : (gameState.sabotage_used ? "Sabotage Used" : (!gameState.mission_timer_end ? "Mission Concluded" : "Signal Sabotage")))}
                     </button>
                     {gameState.sabotage_used && (
                         <div className="mt-4 p-4 bg-red-950/20 border border-red-500/30 rounded-2xl flex justify-between items-center animate-fade-enter-active">

@@ -107,7 +107,8 @@ export const joinRoom = async (roomCode: string, playerName: string) => {
 export const advancePhase = async (roomId: string, nextPhase: GamePhase) => {
   const updateData: any = { 
     current_phase: nextPhase,
-    mission_timer_end: null // Clear timer on every transition by default
+    mission_timer_end: null, // Clear timer on every transition by default
+    sabotage_triggered: false // Reset trigger on every phase change
   };
 
   if (nextPhase === 'mission') {
@@ -122,6 +123,11 @@ export const advancePhase = async (roomId: string, nextPhase: GamePhase) => {
       updateData.current_mission_id = randomMission.id;
     }
     updateData.sabotage_triggered = false;
+
+    // 3. Set the 150s Mission Timer (60s Blindfold + 90s Solving)
+    const timerEnd = new Date();
+    timerEnd.setSeconds(timerEnd.getSeconds() + 150);
+    updateData.mission_timer_end = timerEnd.toISOString();
   }
 
   const { error } = await supabase
@@ -171,9 +177,12 @@ export const resetGame = async (roomId: string) => {
       eidi_pot: 0, 
       current_round: 1, 
       current_mission_id: null,
-      sabotage_triggered: false,
       winner_faction: null,
-      mission_timer_end: null
+      mission_timer_end: null,
+      sabotage_used: false,
+      sabotage_triggered: false,
+      tie_protocol: 'none',
+      tied_player_ids: []
     })
     .eq('id', roomId);
 
@@ -221,12 +230,19 @@ export const assignRoles = async (roomId: string, manualTraitorCount?: number) =
     role: index < traitorCount ? 'naqal_baaz' : 'sukhan_war'
   }));
 
+  console.log("Assigning roles to players...");
   for (const update of updates) {
-    await supabase
+    console.log(`Setting role for ${update.id} to ${update.role}`);
+    const { error } = await supabase
       .from('players')
       .update({ role: update.role })
       .eq('id', update.id);
+    if (error) {
+      console.error(`Failed to assign role to ${update.id}:`, error);
+      throw error;
+    }
   }
+  console.log("Role assignment complete.");
 };
 
 export const liquidatePot = async (roomId: string) => {

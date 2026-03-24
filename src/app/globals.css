@@ -2,6 +2,19 @@
 
 @import "tailwindcss";
 
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-gold: var(--gold);
+  --color-gold-muted: var(--gold-muted);
+  --color-charcoal: var(--charcoal);
+  --color-emerald-deep: var(--emerald-deep);
+  --color-crimson-black: var(--crimson-black);
+  
+  --font-sans: 'Outfit', sans-serif;
+  --font-serif: 'Lora', serif;
+}
+
 :root {
   --background: #050505;
   --foreground: #ffffff;
@@ -16,8 +29,6 @@
   :root {
     --background: #020202;
     --foreground: #ffffff;
-    --gold: #D4AF37;
-    --charcoal: #050505;
   }
 }
 
@@ -104,7 +115,7 @@ h1, h2, h3, .serif {
   100% { transform: translateX(100%); }
 }
 .animate-shimmer {
-  animation: shimmer 2s infinite;
+  animation: shimmer 10s linear infinite;
 }
 
 @keyframes scale-up {

@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function HostDashboard() {
   const { roomCode } = useParams() as { roomCode: string };
   const router = useRouter();
-  const { gameState, loading: gameLoading } = useGameState(roomCode);
+  const { gameState, loading: gameLoading, setGameState } = useGameState(roomCode);
   const phase = gameState?.current_phase || 'lobby';
   const roomId = gameState?.id;
   const { players, loading: playersLoading } = usePlayers(roomId || '');
@@ -36,6 +36,8 @@ export default function HostDashboard() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [hostName, setHostName] = useState<string | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [isBanishmentConfirmed, setIsBanishmentConfirmed] = useState(false);
 
   useEffect(() => {
     setHostName(localStorage.getItem('playerName'));
@@ -236,12 +238,27 @@ export default function HostDashboard() {
             setBanishedPlayerId(null);
             setMissionOutcome(null);
             setSilenceConfirmed(false);
+            setIsBanishmentConfirmed(false);
             
             // Clear reveal state when moving to a new phase
             await supabase.from('game_rooms').update({ 
                 is_revealing: false, 
                 reveal_target_id: null 
             }).eq('id', roomId);
+        }
+
+        // Optimistic UI Update
+        console.log("Optimistic Transition to:", nextPhase);
+        if (nextPhase === 'mission') {
+            const timerEnd = new Date();
+            timerEnd.setSeconds(timerEnd.getSeconds() + 150);
+            setGameState(prev => prev ? { 
+                ...prev, 
+                current_phase: nextPhase,
+                mission_timer_end: timerEnd.toISOString()
+            } : null);
+        } else {
+            setGameState(prev => prev ? { ...prev, current_phase: nextPhase, mission_timer_end: null } : null);
         }
 
         await advancePhase(roomId, nextPhase);
@@ -290,21 +307,58 @@ export default function HostDashboard() {
   ];
 
   const handleAssignRoles = async () => {
-    const minRequired = gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 8);
-    if (players.length < minRequired) return alert(`Strict Rule: ${minRequired} players required to start.`);
+    const minRequired = gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4);
+    if (players.length < minRequired) {
+      console.log("Start Blocked:", { current: players.length, required: minRequired });
+      return alert(`Minimum ${minRequired} players required to start.`);
+    }
+    
+    setIsAssigning(true);
+    console.log("Starting game with", players.length, "players...");
+    
+    // 1. Immediate Optimistic UI Update for the Sultan
+    // This ensures the Teleprompter updates and the button changes INSTANTLY
+    setGameState(prev => prev ? { ...prev, current_phase: 'reveal' } : null);
     
     const manualCount = gameState?.is_dev_mode ? devPlagiaristCount : undefined;
-    await assignRoles(roomId!, manualCount);
-    await handleTransition('reveal');
     
-    // Tutorial Completion
-    localStorage.setItem('hasSeenHostTutorial', 'true');
-    setShowTooltips(false);
+    try {
+      console.log("Assigning roles...");
+      await assignRoles(roomId!, manualCount);
+      
+      console.log("Advancing phase to reveal...");
+      await handleTransition('reveal');
+      
+      // Tutorial Completion
+      localStorage.setItem('hasSeenHostTutorial', 'true');
+      setShowTooltips(false);
+    } catch (err: any) {
+      console.error("Critical Game Start Failure:", err);
+      const errorMsg = err.message || JSON.stringify(err);
+      const errorDetails = err.details || "No further details.";
+      alert(`Critical Failure: ${errorMsg}\n\nDetails: ${errorDetails}\n\nThis is likely a Supabase RLS (Row Level Security) issue. Please ensure 'UPDATE' is enabled for the 'game_rooms' and 'players' tables.`);
+      
+      // Rollback on absolute failure
+      setGameState(prev => prev ? { ...prev, current_phase: 'lobby' } : null);
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   const toggleDevMode = async (enabled: boolean) => {
-    if (!roomId || process.env.NODE_ENV !== 'development') return;
-    await supabase.from('game_rooms').update({ is_dev_mode: enabled }).eq('id', roomId);
+    if (!roomId) return;
+    
+    // Optimistic Update
+    console.log("Optimistic Toggle Dev Mode:", enabled);
+    setGameState(prev => prev ? { ...prev, is_dev_mode: enabled } : null);
+    
+    const { error } = await supabase.from('game_rooms').update({ is_dev_mode: enabled }).eq('id', roomId);
+    if (error) {
+      console.error("Supabase Update Error (is_dev_mode):", error);
+      // Rollback on error
+      setGameState(prev => prev ? { ...prev, is_dev_mode: !enabled } : null);
+      alert("Error enabling dev mode: " + error.message);
+    }
   };
 
   const updateMinPlayers = async (count: number) => {
@@ -315,7 +369,18 @@ export default function HostDashboard() {
   const handleBanish = async (playerId?: string) => {
     const targetId = playerId || banishedPlayerId;
     if (!targetId) return;
-    await supabase.from('players').update({ status: 'banished' }).eq('id', targetId);
+    
+    // Optimistic Update
+    setIsBanishmentConfirmed(true);
+    
+    const { error } = await supabase.from('players').update({ status: 'banished' }).eq('id', targetId);
+    if (error) {
+        console.error("Banishment Failed:", error);
+        setIsBanishmentConfirmed(false);
+        alert("Banishment failed: " + error.message);
+        return;
+    }
+    
     // Reset tie protocol after banishment
     await supabase.from('game_rooms').update({ tie_protocol: 'none', tied_player_ids: [] }).eq('id', roomId);
   };
@@ -370,7 +435,10 @@ export default function HostDashboard() {
   };
 
   const handleVerifySabotage = async () => {
-    if (missionOutcome) return; // Already concluded
+    if (missionOutcome || !gameState) return; // Already concluded
+    
+    // Optimistic Update
+    setGameState(prev => prev ? { ...prev, sabotage_triggered: false } : null);
     
     // Award gold to plagiarists and update pot
     const plagiarists = players.filter(p => p.role === 'naqal_baaz' && p.status === 'alive');
@@ -378,11 +446,10 @@ export default function HostDashboard() {
       await supabase.from('players').update({ private_gold: (p.private_gold || 0) + 500 }).eq('id', p.id);
     }
     await supabase.from('game_rooms').update({ 
-        eidi_pot: (gameState!.eidi_pot || 0) + 1000, 
+        eidi_pot: (gameState.eidi_pot || 0) + 1000, 
         sabotage_triggered: false,
         sabotage_used: true
     }).eq('id', roomId);
-    // DO NOT set missionOutcome or clear timer here
   };
 
   const handleMissionSuccess = async () => {
@@ -412,55 +479,37 @@ export default function HostDashboard() {
     }
   };
 
-  if (gameLoading || playersLoading) return <div className="p-10 text-white">Loading God View...</div>;
-  if (!gameState) return <div className="p-10 text-white">Room {roomCode} not found.</div>;
+  if (gameLoading || playersLoading) {
+    return (
+      <div className="min-h-screen bg-crimson-black flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mx-auto" />
+          <h2 className="serif text-2xl text-gold animate-pulse">Loading God View...</h2>
+        </div>
+      </div>
+    );
+  }
 
+  if (!gameState) {
+    return (
+      <div className="min-h-screen bg-crimson-black flex flex-col items-center justify-center p-6 text-center">
+        <div className="glass p-12 rounded-3xl border border-gold/20 max-w-md">
+          <h1 className="serif text-4xl text-gold mb-4">Room Not Found</h1>
+          <p className="text-white/60 mb-8 font-sans">The Sultan has moved to another court, or this room code has expired.</p>
+          <button 
+            onClick={() => router.push('/')}
+            className="btn-premium bg-gold text-background px-8 py-3 rounded-xl font-bold uppercase tracking-widest"
+          >
+            Return to Entrance
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentMission = activeMission;
   return (
     <main className="min-h-screen bg-crimson-black text-white p-4 lg:p-10 space-y-6 relative">
-      {/* MOBILE ONBOARDING GUARD */}
-      <AnimatePresence>
-        {showTooltips && isMobile && (
-          <motion.div 
-            initial={{ y: -100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -100, opacity: 0 }}
-            className="fixed top-0 left-0 right-0 z-[100] p-4 lg:hidden"
-          >
-            <div className="glass p-6 rounded-3xl border border-gold/30 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
-              <div className="text-[10px] font-black text-gold uppercase mb-2 tracking-widest flex justify-between">
-                <span>{tutorialContent[tutorialStep-1].title}</span>
-                <span>{tutorialStep}/3</span>
-              </div>
-              <h4 className="serif text-white font-bold mb-1">{tutorialContent[tutorialStep-1].heading}</h4>
-              <p className="text-xs text-white/70 leading-relaxed mb-4">{tutorialContent[tutorialStep-1].text}</p>
-              <div className="flex justify-between items-center gap-4">
-                <button 
-                  onClick={() => setShowTooltips(false)}
-                  className="text-[10px] uppercase font-bold text-white/40"
-                >
-                  Skip Guide
-                </button>
-                <div className="flex gap-2">
-                  {tutorialStep > 1 && (
-                    <button 
-                      onClick={() => setTutorialStep(tutorialStep - 1)}
-                      className="btn-premium px-4 py-2 bg-white/5 border-white/10 text-[10px] rounded-xl"
-                    >
-                      Back
-                    </button>
-                  )}
-                  <button 
-                    onClick={() => tutorialStep < 3 ? setTutorialStep(tutorialStep + 1) : setShowTooltips(false)}
-                    className="btn-premium px-6 py-2 bg-gold/20 text-gold border-gold/40 text-[10px] rounded-xl"
-                  >
-                    {tutorialStep < 3 ? "Next Step →" : "Finish"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       
       {/* HEADER: Room Code & Public View */}
       <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10 gap-4">
@@ -603,7 +652,8 @@ export default function HostDashboard() {
                     {phase === 'mission' && gameState.mission_timer_end && "The challenge is set. Solve the couplet before the sand runs out. Speaker, state your case."}
                     {phase === 'majlis' && "Let the Majlis begin! The scent of a Plagiarist is in the air. Debate, discuss... and decide who leaves the court."}
                     {phase === 'night' && "The night deepens. Everyone, eyes closed. Plagiarists... choose the voice you wish to silence."}
-                    {phase === 'end' && gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The court has fallen. The Plagiarists rule the night."}
+                    {phase === 'end' ? (gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The Plagiarists have seized control. The court is lost.") 
+                     : (phase === 'night' ? "The court has fallen. The Plagiarists rule the night." : "The Sultan's word is law. Listen closely to the decree.") }
                  </p>
               </div>
             )}
@@ -762,7 +812,7 @@ export default function HostDashboard() {
             <div className="flex justify-between items-center mb-6 relative">
               <Popover.Root open={showTooltips && !isMobile && tutorialStep === 2}>
                 <Popover.Trigger asChild>
-                  <h2 className="text-xl font-bold serif text-gold cursor-help">Gathered Poets ({players.length}/{gameState.min_players_required ?? 8})</h2>
+                  <h2 className="text-xl font-bold serif text-gold cursor-help">Gathered Poets ({players.length}/{gameState.min_players_required ?? 4})</h2>
                 </Popover.Trigger>
                 <Popover.Portal>
                   <Popover.Content 
@@ -781,7 +831,7 @@ export default function HostDashboard() {
                         <span>2/3</span>
                       </div>
                       <h4 className="serif text-white font-bold mb-2">Assemble the Court</h4>
-                      <p className="text-xs text-white/70 leading-relaxed mb-4">Share the link above. Once we reach <strong>{gameState.min_players_required ?? 8} poets</strong>, the Sultan can start the session.</p>
+                      <p className="text-xs text-white/70 leading-relaxed mb-4">Share the link above. Once we reach <strong>{gameState.min_players_required ?? 4} poets</strong>, the Sultan can start the session.</p>
                       <div className="flex justify-between items-center">
                         <button 
                           onClick={() => setTutorialStep(1)}
@@ -854,7 +904,7 @@ export default function HostDashboard() {
 
         {/* 3. THE CONTROL PANEL */}
         <div className="space-y-6">
-          <section className="glass p-6 rounded-3xl border border-gold/20 bg-gold/5 flex flex-col h-full">
+          <section className="glass p-6 rounded-3xl border border-gold/20 bg-gold/5 flex flex-col h-full relative z-10">
             <h2 className="text-xl font-bold serif text-gold mb-6">Execution Panel</h2>
             
             <div className="flex-1 space-y-3">
@@ -894,7 +944,7 @@ export default function HostDashboard() {
                               <span>{gameState.min_players_required}</span>
                             </div>
                             <input 
-                              type="range" min="1" max="8" 
+                              type="range" min="1" max="12" 
                               value={gameState.min_players_required}
                               onChange={(e) => updateMinPlayers(parseInt(e.target.value))}
                               className="w-full accent-gold"
@@ -917,13 +967,13 @@ export default function HostDashboard() {
                     </div>
                   )}
 
-                  <div className="relative">
+                  <div className="relative z-20">
                     <button 
                       onClick={handleAssignRoles}
-                      disabled={players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
-                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${showTooltips && tutorialStep === 3 && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
+                      disabled={isAssigning || players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
+                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${isAssigning ? 'opacity-50 cursor-not-allowed' : ''} ${showTooltips && tutorialStep === 3 && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
                     >
-                      Assign Roles & Start
+                      {isAssigning ? 'Assigning Roles...' : 'Assign Roles & Start'}
                     </button>
                   </div>
                   {players.length < (gameState?.min_players_required ?? 4) && !gameState?.is_dev_mode && (
@@ -935,9 +985,10 @@ export default function HostDashboard() {
               {phase === 'reveal' && (
                 <button 
                     onClick={() => handleTransition('mission')}
-                    className="btn-premium w-full bg-gold text-crimson-black py-6 rounded-2xl border-gold/50 text-lg"
+                    disabled={gameState.current_mission_id !== null}
+                    className={`btn-premium w-full bg-gold text-crimson-black py-6 rounded-2xl border-gold/50 text-lg ${gameState.current_mission_id ? 'opacity-20 grayscale' : ''}`}
                 >
-                    Begin First Mission
+                    {gameState.current_mission_id ? 'Mission in Progress...' : 'Begin First Mission'}
                 </button>
               )}
 
@@ -967,10 +1018,10 @@ export default function HostDashboard() {
                     
                     <button 
                       onClick={handleVerifySabotage}
-                      disabled={timeLeft > 90 || !gameState.sabotage_triggered || !!missionOutcome}
+                      disabled={!gameState.sabotage_triggered || gameState.sabotage_used || !!missionOutcome}
                       className="btn-premium w-full bg-red-600/20 text-red-500 border-red-600/40 py-4 rounded-2xl disabled:opacity-20"
                     >
-                      Verify Sabotage {gameState.sabotage_triggered && "(Alert!)"}
+                      {gameState.sabotage_used ? "Sabotage Verified" : `Verify Sabotage ${gameState.sabotage_triggered ? "(Alert!)" : ""}`}
                     </button>
 
                     <button 
@@ -993,7 +1044,7 @@ export default function HostDashboard() {
                         {isVotesLocked ? "Votes Locked" : "Lock Votes & Reveal"}
                     </button>
                     
-                    {isVotesLocked && !isTie && gameState?.tie_protocol === 'none' && (
+                    {isVotesLocked && !isTie && gameState?.tie_protocol === 'none' && !isBanishmentConfirmed && (
                         <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
                             <p className="text-[10px] text-center text-gray-500 uppercase font-black tracking-widest">Select Player to Banish</p>
                             {mostVotedPlayers.map(p => (
@@ -1055,22 +1106,52 @@ export default function HostDashboard() {
 
                     {gameState?.tie_protocol === 'revote' && (
                         <div className="p-6 bg-emerald-950/40 rounded-3xl border-2 border-emerald-500/40 text-center space-y-3">
-                            <h3 className="text-emerald-500 font-black uppercase tracking-widest text-xs animate-pulse">Re-Vote in Progress</h3>
+                            <h3 className="text-emerald-500 font-black uppercase tracking-widest text-xs animate-pulse">
+                                {isVotesLocked ? "Re-Vote Results" : "Re-Vote in Progress"}
+                            </h3>
                             <p className="text-white/40 text-[10px]">Tied: {gameState.tied_player_ids?.map(id => players.find(p => p.id === id)?.name).join(' vs ')}</p>
-                            <div className="text-2xl font-black tabular-nums">{votes.length} / {alivePlayers.length}</div>
-                            <button 
-                                onClick={() => setIsVotesLocked(true)}
-                                disabled={votes.length < alivePlayers.length || isVotesLocked}
-                                className="btn-premium w-full bg-emerald-600 py-4 rounded-xl text-sm"
-                            >
-                                Lock Re-Votes
-                            </button>
+                            
+                            {!isVotesLocked ? (
+                                <>
+                                    <div className="text-2xl font-black tabular-nums">{votes.length} / {alivePlayers.length}</div>
+                                    <button 
+                                        onClick={() => setIsVotesLocked(true)}
+                                        disabled={votes.length < alivePlayers.length || isVotesLocked}
+                                        className="btn-premium w-full bg-emerald-600 py-4 rounded-xl text-sm"
+                                    >
+                                        Lock Re-Votes
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="space-y-3 pt-4 border-t border-white/10">
+                                    <p className="text-[10px] text-center text-gray-500 uppercase font-black tracking-widest">Select Player to Banish</p>
+                                    {mostVotedPlayers.map(p => (
+                                        <button key={p.id} onClick={() => setBanishedPlayerId(p.id)} className={`btn-premium w-full py-4 rounded-xl border ${banishedPlayerId === p.id ? 'bg-red-600 border-red-400' : 'bg-white/5 border-white/10'}`}>
+                                            Banish {p.name} ({votes.filter(v => v.target_id === p.id).length} votes)
+                                        </button>
+                                    ))}
+                                    <button 
+                                        onClick={() => handleBanish()}
+                                        disabled={!banishedPlayerId || isBanishmentConfirmed}
+                                        className="btn-premium w-full bg-red-600 py-4 rounded-xl border-red-500 disabled:opacity-20"
+                                    >
+                                        Confirm Banishment
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {isBanishmentConfirmed && (
+                        <div className="p-4 bg-red-600/10 rounded-2xl border border-red-500/40 text-center animate-pulse">
+                            <p className="text-red-500 font-bold uppercase tracking-widest text-xs">Banishment Executed</p>
+                            <p className="text-[10px] text-white/40 italic">The word has been struck from the books.</p>
                         </div>
                     )}
 
                     <button 
                         onClick={() => potentialWinner ? handleTransition('end') : handleTransition('night')}
-                        disabled={!players.some(p => p.status === 'banished') && !potentialWinner} 
+                        disabled={!isBanishmentConfirmed && !potentialWinner} 
                         className="btn-premium w-full bg-white text-black py-6 rounded-2xl border-gray-300 mt-4 text-lg"
                     >
                         {potentialWinner ? 'Reveal Scores (Victory!)' : 'Proceed to Night'}
@@ -1151,11 +1232,24 @@ export default function HostDashboard() {
               {phase === 'end' && (
                 <div className="space-y-4">
                     <div className="p-8 bg-gold/20 rounded-3xl border-4 border-gold/40 text-center mb-6 shadow-2xl">
-                        <h2 className="text-5xl font-black text-gold serif mb-3 uppercase tracking-tighter italic">{gameState.winner_faction} WIN!</h2>
+                        <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
+                  {gameState.winner_faction === 'poets' ? 'The Poetic Order Restored' : 'The Plagiarists Rule the City'}
+                </h2>
                         <p className="text-gold/60 uppercase text-[10px] font-black tracking-widest border-t border-gold/20 pt-4">Final Eidi Pot: ₹{gameState.eidi_pot}</p>
                     </div>
                     <button onClick={() => resetGame(roomId!)} className="btn-premium w-full bg-emerald-600 py-5 rounded-2xl border-emerald-500 shadow-xl">Play Again</button>
-                    <button onClick={() => deleteRoom(roomId!)} className="btn-premium w-full bg-white/5 text-gray-500 py-4 rounded-xl border-white/10">End Gathering</button>
+                    <button 
+                        onClick={async () => {
+                            if (gameState.winner_faction === 'poets') {
+                                await liquidatePot(roomId!);
+                            }
+                            await deleteRoom(roomId!);
+                            router.push('/');
+                        }} 
+                        className="btn-premium w-full bg-white/10 text-white/60 py-4 rounded-xl border-white/10 hover:bg-white/20 active:scale-95 transition-all"
+                    >
+                        End Gathering & Pay Out
+                    </button>
                 </div>
               )}
             </div>

@@ -1,12 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-export default function LandingPage() {
+function LandingContent() {
   const [showRules, setShowRules] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const rulesRef = useRef<HTMLButtonElement>(null);
+  const searchParams = useSearchParams();
+  const roomCode = searchParams.get('code');
+
+  // URL for joining with code if available
+  const joinUrl = roomCode ? `/join?code=${roomCode}` : '/join';
 
   // Force scroll to top and disable restoration on mount
   useLayoutEffect(() => {
@@ -33,7 +39,7 @@ export default function LandingPage() {
         }
       },
       { 
-        threshold: 1.0,
+        threshold: 1.0, 
         rootMargin: '0px 0px -10% 0px'
       }
     );
@@ -74,7 +80,7 @@ export default function LandingPage() {
           <span className="text-gold serif font-bold text-xl tracking-tight">Mehfil-e-Khaas</span>
         </div>
         <div className="flex gap-4">
-          <Link href="/join" className="text-[10px] font-black uppercase tracking-widest text-gold/60 hover:text-gold border border-gold/20 hover:border-gold/50 px-4 py-2 rounded-full transition-all">Join</Link>
+          <Link href={joinUrl} className="text-[10px] font-black uppercase tracking-widest text-gold/60 hover:text-gold border border-gold/20 hover:border-gold/50 px-4 py-2 rounded-full transition-all">Join</Link>
           <Link href="/host/setup" className="text-[10px] font-black uppercase tracking-widest bg-gold text-background px-4 py-2 rounded-full hover:scale-105 transition-all">Host</Link>
         </div>
       </nav>
@@ -91,7 +97,7 @@ export default function LandingPage() {
           <h1 className="text-7xl sm:text-9xl font-bold text-gold serif tracking-tight leading-none drop-shadow-2xl">
             Mehfil-e-Khaas
           </h1>
-          <p className="text-xl sm:text-2xl text-gold/60 italic font-serif">
+          <p className="text-xl sm:text-2xl text-white/60 italic font-serif">
             "A Social Deduction Game of Poetry & Betrayal."
           </p>
         </div>
@@ -108,7 +114,7 @@ export default function LandingPage() {
           </Link>
 
           <Link 
-            href="/join" 
+            href={joinUrl} 
             className="w-full sm:w-1/2 rounded-full border border-gold/40 px-8 py-4 text-lg font-black uppercase tracking-widest text-gold/80 hover:bg-gold/10 hover:text-gold transition-all hover:scale-[1.05] active:scale-[0.98] text-center"
           >
             Join Game
@@ -119,7 +125,7 @@ export default function LandingPage() {
         <button 
           ref={rulesRef}
           onClick={() => setShowRules(!showRules)}
-          className="group flex flex-col items-center gap-2 text-gold/30 hover:text-gold/60 transition-colors uppercase text-[10px] font-black tracking-[0.3em] mt-12 bg-transparent outline-none border-none"
+          className="group flex flex-col items-center gap-2 text-white/30 hover:text-gold/60 transition-colors uppercase text-[10px] font-black tracking-[0.3em] mt-12 bg-transparent outline-none border-none"
         >
           <span>The Nizaam (Rules)</span>
           <div className={`transition-all duration-700 ease-in-out ${showRules ? '-rotate-180 text-gold scale-125' : 'animate-bounce-slow'}`}>
@@ -181,5 +187,13 @@ export default function LandingPage() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-gold/5 blur-[120px] rounded-full"></div>
       </div>
     </main>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex flex-col items-center justify-center text-gold serif italic">Loading...</div>}>
+      <LandingContent />
+    </Suspense>
   );
 }

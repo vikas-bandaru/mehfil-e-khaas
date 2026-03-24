@@ -156,3 +156,25 @@ ALTER PUBLICATION supabase_realtime ADD TABLE night_votes;
 -- 2. Update Game Rooms for Reveal State
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS reveal_target_id UUID REFERENCES players(id);
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS is_revealing BOOLEAN DEFAULT FALSE;
+
+-- 1. GAME ROOMS: Allow anyone to create, view, and update room phases
+CREATE POLICY "Allow public insert to game_rooms" ON "public"."game_rooms" FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow public select on game_rooms" ON "public"."game_rooms" FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow public update on game_rooms" ON "public"."game_rooms" FOR UPDATE TO anon USING (true) WITH CHECK (true);
+
+-- 2. PLAYERS: Allow joining, role updates, and state changes
+CREATE POLICY "Allow public insert to players" ON "public"."players" FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow public select on players" ON "public"."players" FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow public update on players" ON "public"."players" FOR UPDATE TO anon USING (true) WITH CHECK (true);
+
+-- 3. VOTES & NIGHT VOTES: Allow casting and clearing votes
+CREATE POLICY "Allow public insert to votes" ON "public"."votes" FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow public select on votes" ON "public"."votes" FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow public delete on votes" ON "public"."votes" FOR DELETE TO anon USING (true);
+
+CREATE POLICY "Allow public insert to night_votes" ON "public"."night_votes" FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow public select on night_votes" ON "public"."night_votes" FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow public delete on night_votes" ON "public"."night_votes" FOR DELETE TO anon USING (true);
+
+-- 4. MISSIONS: Read-only for everyone
+CREATE POLICY "Allow public select on missions" ON "public"."missions" FOR SELECT TO anon USING (true);
