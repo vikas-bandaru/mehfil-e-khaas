@@ -27,6 +27,8 @@ export default function HostDashboard() {
   const [origin, setOrigin] = useState('');
   const [devPlagiaristCount, setDevPlagiaristCount] = useState(1);
   const [showDevSettings, setShowDevSettings] = useState(false);
+  const [isToolkitOpen, setIsToolkitOpen] = useState(false);
+  const [showScript, setShowScript] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [hostName, setHostName] = useState<string | null>(null);
 
@@ -164,7 +166,9 @@ export default function HostDashboard() {
     if (hasPlayedRef.current) return;
     hasPlayedRef.current = true;
     
-    console.log("🔊 MISSION TIMER OVER - PLAYING BUZZER");
+    if (process.env.NODE_ENV === 'development') {
+      console.log("🔊 MISSION TIMER OVER - PLAYING BUZZER");
+    }
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (audioCtx.state === 'suspended') {
@@ -243,7 +247,7 @@ export default function HostDashboard() {
   };
 
   const handleAssignRoles = async () => {
-    const minRequired = gameState?.is_dev_mode ? (gameState?.min_players_required ?? 1) : 8;
+    const minRequired = gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 8);
     if (players.length < minRequired) return alert(`Strict Rule: ${minRequired} players required to start.`);
     
     const manualCount = gameState?.is_dev_mode ? devPlagiaristCount : undefined;
@@ -252,7 +256,7 @@ export default function HostDashboard() {
   };
 
   const toggleDevMode = async (enabled: boolean) => {
-    if (!roomId) return;
+    if (!roomId || process.env.NODE_ENV !== 'development') return;
     await supabase.from('game_rooms').update({ is_dev_mode: enabled }).eq('id', roomId);
   };
 
@@ -406,14 +410,33 @@ export default function HostDashboard() {
           >
             Open Public Display 📺
           </button>
+          <button 
+            onClick={() => setIsToolkitOpen(true)}
+            className="w-12 h-12 rounded-full bg-gold text-background border-4 border-gold/50 flex items-center justify-center text-xl font-black shadow-lg hover:scale-110 active:scale-90 transition-all"
+            title="Host Toolkit"
+          >
+            ?
+          </button>
         </div>
       </div>
       
       {/* 1. THE TELEPROMPTER */}
-      <section className="bg-gold text-crimson-black p-6 rounded-2xl shadow-xl border-4 border-gold/50 animate-bounce-subtle">
-        <h3 className="text-xs uppercase font-black tracking-widest mb-1 opacity-70">Sultan's Teleprompter</h3>
-        <p className="text-2xl lg:text-3xl font-bold serif leading-tight">
-          {phase === 'lobby' && "Wait for at least 4 poets. Once gathered, click 'Assign Roles'."}
+      <section className="bg-gold text-crimson-black p-6 rounded-2xl shadow-xl border-4 border-gold/50 animate-bounce-subtle relative overflow-hidden">
+        <div className="flex justify-between items-start mb-2">
+          <h3 className="text-xs uppercase font-black tracking-widest opacity-70">Sultan's Teleprompter</h3>
+          <button 
+            onClick={() => setShowScript(!showScript)}
+            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all ${
+              showScript ? 'bg-background text-gold border-background' : 'bg-transparent text-background/40 border-background/20'
+            }`}
+          >
+            {showScript ? '📜 Script Active' : '📜 Show Script'}
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <p className="text-2xl lg:text-3xl font-bold serif leading-tight">
+            {phase === 'lobby' && `Wait for at least ${gameState.min_players_required ?? 4} poets. Once gathered, click 'Assign Roles'.`}
           {phase === 'reveal' && "Role Reveal: Tell everyone to look at their screens. One or more among them are Plagiarists. They must keep it secret!"}
           {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s Blindfold Session. Tell everyone to close their eyes. Plagiarists, check your assignments. Silence for 60s!"}
           {phase === 'mission' && gameState.mission_timer_end && "Mission in progress. Poets are solving. Elect a Speaker to state the final answer quietly to you."}
@@ -429,8 +452,82 @@ export default function HostDashboard() {
             : "Shhh! Tell everyone to close their eyes. Wait for the Plagiarists to vote on their phones. Once identified, click Confirm."
           )}
           {phase === 'end' && "The Mehfil is over. Reveal the identities and announce the winners!"}
-        </p>
+          </p>
+        </div>
+
+        {showScript && (
+          <div className="animate-fade-in py-3 px-4 bg-background/5 border-t border-background/10 mt-4 rounded-xl">
+             <div className="text-[8px] uppercase font-black opacity-40 mb-1 tracking-widest">Narrator Script (Read Aloud)</div>
+             <p className="text-lg italic font-medium opacity-90">
+                {phase === 'lobby' && "Welcome to the Mehfil-e-Khaas! Today, poetry meets betrayal. Poets, gather your thoughts. Plagiarists, sharpen your knives."}
+                {phase === 'reveal' && "Look to your devices. Your destiny in this court is written. Keep your secret guarded with your life."}
+                {phase === 'mission' && !gameState.mission_timer_end && "The court falls dark. Poets, close your eyes. Plagiarists... reveal yourselves to one another."}
+                {phase === 'mission' && gameState.mission_timer_end && "The challenge is set. Solve the couplet before the sand runs out. Speaker, state your case."}
+                {phase === 'majlis' && "Let the Majlis begin! The scent of a Plagiarist is in the air. Debate, discuss... and decide who leaves the court."}
+                {phase === 'night' && "The night deepens. Everyone, eyes closed. Plagiarists... choose the voice you wish to silence."}
+                {phase === 'end' && gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The court has fallen. The Plagiarists rule the night."}
+             </p>
+          </div>
+        )}
       </section>
+
+      {/* HOST TOOLKIT DRAWER */}
+      <div className={`fixed inset-y-0 right-0 w-80 bg-[#f4e4bc] text-[#2c1810] shadow-2xl z-50 transform transition-transform duration-500 ease-in-out border-l-8 border-[#d4af37]/30 ${isToolkitOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="h-full flex flex-col p-8 serif relative overflow-hidden">
+          {/* Manuscript Texture Overlay */}
+          <div className="absolute inset-0 opacity-5 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper.png')]" />
+          
+          <div className="flex justify-between items-center mb-8 relative z-10">
+            <h2 className="text-2xl font-bold italic border-b-2 border-[#2c1810]/20 pb-1">The Sultan's Toolkit</h2>
+            <button onClick={() => setIsToolkitOpen(false)} className="text-2xl hover:scale-125 transition-transform">×</button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-8 relative z-10 custom-scrollbar pr-2">
+            <section className="space-y-4">
+              <h3 className="text-[10px] uppercase font-black tracking-widest opacity-50 border-l-2 border-[#d4af37] pl-2">Glossary of the Court</h3>
+              <div className="space-y-4">
+                <div className="group">
+                  <div className="font-bold italic text-lg text-[#8b0000]">Sukhan-war</div>
+                  <div className="text-sm opacity-80 leading-relaxed font-sans">The True Poet. Your mission is to solve the couplet and identify the Naqal-baaz.</div>
+                </div>
+                <div className="group">
+                  <div className="font-bold italic text-lg text-[#8b0000]">Naqal-baaz</div>
+                  <div className="text-sm opacity-80 leading-relaxed font-sans">The Plagiarist. You must sabotage the mission while remaining undetected.</div>
+                </div>
+                <div className="group">
+                  <div className="font-bold italic text-lg text-[#8b0000]">Zabaan-bandi</div>
+                  <div className="text-sm opacity-80 leading-relaxed font-sans">The Silencing. The Plagiarists choose one poet to lose their vote each night.</div>
+                </div>
+                <div className="group">
+                  <div className="font-bold italic text-lg text-[#8b0000]">Majlis</div>
+                  <div className="text-sm opacity-80 leading-relaxed font-sans">The Grand Assembly. The time of debate, accusation, and banishment.</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h3 className="text-[10px] uppercase font-black tracking-widest opacity-50 border-l-2 border-[#d4af37] pl-2">Sultan's Protocols</h3>
+              <ul className="text-xs space-y-2 list-disc pl-4 opacity-80 font-sans">
+                <li>Verify the "Source of Truth" answer with the Speaker.</li>
+                <li>Ensure the Plagiarists remain silent during the Blindfold sessions.</li>
+                <li>In case of a tie, use the Pen of Fate or your own Decree.</li>
+              </ul>
+            </section>
+          </div>
+          
+          <div className="mt-8 pt-4 border-t border-[#2c1810]/10 text-center relative z-10">
+            <div className="text-[8px] uppercase font-bold opacity-30 mt-2">© Mehfil-e-Khaas • Protocol 1.0</div>
+          </div>
+        </div>
+      </div>
+      
+      {/* OVERLAY */}
+      {isToolkitOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity" 
+          onClick={() => setIsToolkitOpen(false)}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -478,7 +575,7 @@ export default function HostDashboard() {
 
           <section className="glass p-6 rounded-3xl border border-white/10 h-full">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold serif text-gold">Gathered Poets ({players.length}/8)</h2>
+                <h2 className="text-xl font-bold serif text-gold">Gathered Poets ({players.length}/{gameState.min_players_required ?? 8})</h2>
                 <div className="text-sm font-mono text-gold/60">POT: ₹{gameState.eidi_pot}</div>
             </div>
 
@@ -539,12 +636,14 @@ export default function HostDashboard() {
               {phase === 'lobby' && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center mb-4">
-                    <button 
-                      onClick={() => setShowDevSettings(!showDevSettings)}
-                      className="text-[10px] uppercase font-black text-gold/60 hover:text-gold transition-all flex items-center gap-2"
-                    >
-                      {showDevSettings ? 'Hide Settings' : '⚙️ Dev Settings'}
-                    </button>
+                    {process.env.NODE_ENV === 'development' && (
+                      <button 
+                        onClick={() => setShowDevSettings(!showDevSettings)}
+                        className="text-[10px] uppercase font-black text-gold/60 hover:text-gold transition-all flex items-center gap-2"
+                      >
+                        {showDevSettings ? 'Hide Settings' : '⚙️ Dev Settings'}
+                      </button>
+                    )}
                     {gameState?.is_dev_mode && (
                       <span className="text-[10px] bg-red-600/20 text-red-500 px-2 py-0.5 rounded-full font-black uppercase tracking-widest border border-red-500/20">Dev Mode Active</span>
                     )}
@@ -595,13 +694,13 @@ export default function HostDashboard() {
 
                   <button 
                     onClick={handleAssignRoles}
-                    disabled={players.length < (gameState?.is_dev_mode ? (gameState?.min_players_required ?? 1) : 4)}
+                    disabled={players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
                     className="btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all"
                   >
                     Assign Roles & Start
                   </button>
-                  {players.length < 4 && !gameState?.is_dev_mode && (
-                    <p className="text-center text-red-500 text-[10px] uppercase font-black tracking-widest mt-4 animate-pulse">Minimum 4 players required to start the Mehfil.</p>
+                  {players.length < (gameState?.min_players_required ?? 4) && !gameState?.is_dev_mode && (
+                    <p className="text-center text-red-500 text-[10px] uppercase font-black tracking-widest mt-4 animate-pulse">Minimum {gameState?.min_players_required ?? 4} players required to start the Mehfil.</p>
                   )}
                 </div>
               )}

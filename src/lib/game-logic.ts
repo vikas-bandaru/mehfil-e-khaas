@@ -46,10 +46,15 @@ export interface Mission {
  * Core Game Logic Utilities
  */
 
-export const createRoom = async (roomCode: string, hostName: string, shouldPlay: boolean = true) => {
+export const createRoom = async (roomCode: string, hostName: string, shouldPlay: boolean = true, minPlayers: number = 8) => {
   const { data: game, error: gameError } = await supabase
     .from('game_rooms')
-    .insert([{ room_code: roomCode, current_phase: 'lobby', eidi_pot: 0 }])
+    .insert([{ 
+      room_code: roomCode, 
+      current_phase: 'lobby', 
+      eidi_pot: 0,
+      min_players_required: minPlayers
+    }])
     .select()
     .single();
 

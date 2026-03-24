@@ -9,6 +9,7 @@ function HostSetupContent() {
   const router = useRouter();
   const [playerName, setPlayerName] = useState('');
   const [shouldPlay, setShouldPlay] = useState(true);
+  const [minPlayers, setMinPlayers] = useState(8);
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
@@ -16,7 +17,7 @@ function HostSetupContent() {
     setLoading(true);
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const { game, player } = await createRoom(code, playerName, shouldPlay);
+      const { game, player } = await createRoom(code, playerName, shouldPlay, minPlayers);
       localStorage.setItem('playerName', playerName);
       if (player) localStorage.setItem('playerId', player.id);
       localStorage.setItem('roomId', game.id);
@@ -48,6 +49,29 @@ function HostSetupContent() {
                 onChange={(e) => setPlayerName(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-gold transition-all text-white text-xl font-serif text-center"
             />
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-end px-1">
+              <label className="text-[10px] uppercase font-black text-gold/40 tracking-widest">Required Gathering Size</label>
+              <span className="text-2xl font-black text-gold serif">{minPlayers} <span className="text-[10px] uppercase font-bold opacity-40">Poets</span></span>
+            </div>
+            <div className="bg-white/5 p-6 rounded-3xl border border-white/10 space-y-4">
+              <input 
+                type="range" 
+                min="4" 
+                max="12" 
+                step="1"
+                value={minPlayers}
+                onChange={(e) => setMinPlayers(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-gold"
+              />
+              <div className="flex justify-between text-[8px] font-black text-white/20 uppercase tracking-tighter">
+                <span>4 (Small)</span>
+                <span>8 (Grand)</span>
+                <span>12 (Royal)</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between bg-white/5 p-5 rounded-3xl border border-white/10 group cursor-pointer" onClick={() => setShouldPlay(!shouldPlay)}>
