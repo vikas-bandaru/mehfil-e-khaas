@@ -9,7 +9,9 @@ The core mechanic of the game depends on tight synchronization across three dist
 
 ## 2. Perspective-Driven UI Architecture
 The application is split into three primary entry points:
+- `/host/setup`: Dedicated page for hosting a new Mehfil.
 - `/host/[roomCode]`: Elevated control, private logic reveal, and game state transitions.
+- `/join`: Dedicated portal for players to enter a room code.
 - `/play/[roomCode]`: Mobile-first player interface with hidden roles and action buttons.
 - `/display/[roomCode]`: Cinematic public view for collective tracking and phase reveals.
 - **Decision:** We used conditional rendering within these routes to manage "Inner Phases" (e.g., Blindfold vs. Solving within a Mission).
@@ -39,7 +41,12 @@ The application is split into three primary entry points:
 - **Visual Feedback:** Buttons use `active:scale-95` to provide tactile confirmation of actions, reducing accidental double-clicks.
 - **Layout Stability:** The `PlayerClient` uses `h-screen overflow-hidden` and `touch-none` overlays for restricted states (Silenced, Banished) to prevent "pull-to-refresh" or accidental scrolling from breaking the immersion.
 
-## 7. Database Schema Queries (PostgreSQL)
+## 8. Visual Systems & Thematic UI
+- **Decision**: Implemented the **"Royal Nocturne"** design system across all routes.
+- **Rationale**: Uses a deep charcoal (`#050505`) and gold (`#D4AF37`) palette with Lora (Serif) typography to evoke a high-stakes, historical manuscript aesthetic.
+- **Interaction**: Integrated `IntersectionObserver` on the landing page to automatically expand the rules section once the CTA enters the viewport, ensuring a premium onboarding flow.
+
+## 9. Database Schema Queries (PostgreSQL)
 The following SQL queries were executed to evolve the database schema to support the Mehfil's game mechanics:
 
 ### Game Rooms Table Updates
@@ -68,7 +75,7 @@ CREATE TABLE IF NOT EXISTS night_votes (
 );
 ```
 
-## 8. Core JavaScript Utilities (`src/lib/game-logic.ts`)
+## 10. Core JavaScript Utilities (`src/lib/game-logic.ts`)
 We encapsulated the game's state transitions and calculations into reusable utility functions:
 
 - `assignRoles(roomId, manualCount)`: Dynamically calculates the number of Plagiarists based on room size:

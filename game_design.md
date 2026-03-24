@@ -3,6 +3,12 @@
 ## 🕯️ The Concept
 "Mehfil-e-Khaas" is a social deduction game set in a high-stakes poetic gathering in historical Hyderabad. The Sultan has offered a collective bounty (`Eidi Pot`) to his most loyal poets. However, the gathering has been infiltrated by Plagiarists (`Naqal-baaz`) whose goal is to sabotage the poetry and steal the wealth for themselves.
 
+## 🎭 Visual Identity: Royal Nocturne
+The game features a premium, cinematic aesthetic defined by:
+- **Palette**: Deep charcoal backgrounds with Gold (`#D4AF37`) accents.
+- **Typography**: Sophisticated Serif (Lora) for headings to evoke a "Historical Manuscript" feel.
+- **Atmosphere**: Glassmorphism, subtle gold glows, and smooth transitions.
+
 ## 🕹️ Gameplay Loop
 
 ### 1. Mission Phase (The Poetic Challenge)

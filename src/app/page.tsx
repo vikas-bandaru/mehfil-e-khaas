@@ -1,162 +1,176 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
+import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { createRoom, joinRoom } from '@/lib/game-logic';
-
-function HomeContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'join' | 'create'>('create');
-  const [roomCode, setRoomCode] = useState('');
-  const [playerName, setPlayerName] = useState('');
-  const [shouldPlay, setShouldPlay] = useState(true);
-  const [loading, setLoading] = useState(false);
+export default function LandingPage() {
+  const [showRules, setShowRules] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const rulesRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const code = searchParams.get('code');
-    if (code) {
-      setRoomCode(code.toUpperCase());
-      setMode('join');
-    }
-  }, [searchParams]);
+    // Sticky menu scroll listener
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 100);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Intersection Observer for auto-expanding rules
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          setShowRules(true);
+        }
+      },
+      { 
+        threshold: 1.0, // Trigger when the entire button is visible
+        rootMargin: '0px 0px -10% 0px' // Offset to trigger slightly before it hits the bottom
+      }
+    );
 
-  const handleCreate = async () => {
-    if (!playerName) return alert('Enter your name');
-    setLoading(true);
-    try {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const { game, player } = await createRoom(code, playerName, shouldPlay);
-      localStorage.setItem('playerName', playerName);
-      if (player) localStorage.setItem('playerId', player.id);
-      localStorage.setItem('roomId', game.id);
-      localStorage.setItem('isHost', 'true');
-      router.push(`/host/${code}`);
-    } catch (error) {
-      console.error(error);
-      alert('Failed to create room');
-    } finally {
-      setLoading(false);
+    if (rulesRef.current) {
+      observer.observe(rulesRef.current);
     }
-  };
 
-  const handleJoin = async () => {
-    if (!roomCode || !playerName) return alert('Enter name and room code');
-    setLoading(true);
-    try {
-      const { player, roomId } = await joinRoom(roomCode, playerName);
-      localStorage.setItem('playerName', playerName);
-      localStorage.setItem('playerId', player.id);
-      localStorage.setItem('roomId', roomId);
-      localStorage.setItem('isHost', 'false');
-      router.push(`/play/${roomCode}`);
-    } catch (error) {
-      console.error(error);
-      alert('Failed to join room. check code.');
-    } finally {
-      setLoading(false);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rulesRef.current) observer.unobserve(rulesRef.current);
+    };
+  }, []);
+
+  const rules = [
+    {
+      title: "The Mission",
+      description: "You have 90 seconds to solve the poetic riddle. The Sukhan-wars (Poets) must collaborate, while the Naqal-baaz (Plagiarists) seek to sabotage.",
+      icon: "📜"
+    },
+    {
+      title: "The Majlis",
+      description: "Gather in the assembly to debate and vote. Unmask the pretenders and banish them from the court before they silence the true poets.",
+      icon: "⚖️"
+    },
+    {
+      title: "The Night",
+      description: "As darkness falls, the Zabaan-bandi begins. The plagiarists choose their target to silence, moving one step closer to absolute betrayal.",
+      icon: "🌙"
     }
-  };
+  ];
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-crimson-black text-white">
-      <div className="max-w-md w-full glass p-8 rounded-4xl space-y-10 animate-fade-enter-active border border-white/5">
-        <div className="text-center space-y-2">
-          <h1 className="text-6xl font-black text-gold serif tracking-tighter italic">MK</h1>
-          <h2 className="text-3xl font-bold text-white serif tracking-wide">Mehfil-e-Khaas</h2>
-          <p className="text-gold/40 text-[10px] uppercase font-black tracking-[0.4em]">Social Deduction Poetry</p>
+    <main className="min-h-screen bg-background text-white flex flex-col items-center selection:bg-gold selection:text-background overflow-x-hidden">
+      {/* Sticky Menu / Header */}
+      <nav className={`fixed top-0 left-0 w-full z-50 transition-all duration-500 border-b border-gold/10 glass px-6 py-4 flex justify-between items-center ${isScrolled ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
+        <div className="flex items-center gap-3">
+          <span className="text-gold serif font-bold text-xl tracking-tight">Mehfil-e-Khaas</span>
         </div>
+        <div className="flex gap-4">
+          <Link href="/join" className="text-[10px] font-black uppercase tracking-widest text-gold/60 hover:text-gold border border-gold/20 hover:border-gold/50 px-4 py-2 rounded-full transition-all">Join</Link>
+          <Link href="/host/setup" className="text-[10px] font-black uppercase tracking-widest bg-gold text-background px-4 py-2 rounded-full hover:scale-105 transition-all">Host</Link>
+        </div>
+      </nav>
 
-        <div className="space-y-6">
-          {/* STEP 1: Name Field */}
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black text-gold/40 tracking-widest ml-1">Your Takhallus (Name)</label>
-            <input
-                type="text"
-                placeholder={mode === 'create' ? "Host Name" : "Player Name"}
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-gold transition-all text-white text-xl font-serif text-center"
-            />
+      {/* Hero Section */}
+      <section className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-4xl w-full space-y-12 py-20 animate-fade-enter-active">
+        <div className="space-y-4">
+          <div className="flex items-center justify-center space-x-4 mb-4">
+            <div className="h-[1px] w-12 bg-gold/30 hidden sm:block"></div>
+            <span className="text-gold uppercase tracking-[0.5em] text-[10px] font-black">Est. 2026</span>
+            <div className="h-[1px] w-12 bg-gold/30 hidden sm:block"></div>
           </div>
-
-          {mode === 'join' ? (
-            <div className="space-y-6 animate-fade-enter-active">
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-black text-emerald-500/40 tracking-widest ml-1">Room Code</label>
-                <input
-                    type="text"
-                    placeholder="ABCDEF"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                    className="w-full bg-emerald-950/20 border border-emerald-500/20 rounded-2xl px-6 py-5 focus:outline-none focus:border-emerald-500 transition-all text-white text-center text-4xl font-black tracking-[0.2em]"
-                />
-              </div>
-              <button
-                onClick={handleJoin}
-                disabled={loading}
-                className="btn-premium w-full bg-emerald-600 py-5 rounded-2xl text-white border-emerald-500 shadow-xl text-xl font-black uppercase tracking-widest"
-              >
-                {loading ? 'Entering...' : 'Join Now'}
-              </button>
-              <button 
-                onClick={() => setMode('create')} 
-                className="w-full text-[10px] uppercase font-black text-white/20 hover:text-white/40 tracking-widest transition-colors py-2"
-              >
-                Switch to Hosting
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-8 animate-fade-enter-active">
-              <div className="flex items-center justify-between bg-white/5 p-5 rounded-3xl border border-white/10 group cursor-pointer" onClick={() => setShouldPlay(!shouldPlay)}>
-                 <div className="space-y-1">
-                    <div className="text-xs font-black uppercase text-gold tracking-widest">Host as Player</div>
-                    <div className="text-[10px] text-gray-500 italic">I want to participate in the game</div>
-                 </div>
-                 <div className={`w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1 ${shouldPlay ? 'bg-emerald-600' : 'bg-white/10'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full transition-all duration-300 ${shouldPlay ? 'translate-x-6' : 'translate-x-0'}`} />
-                 </div>
-              </div>
-
-              <button
-                onClick={handleCreate}
-                disabled={loading}
-                className="btn-premium w-full bg-gold py-6 rounded-3xl text-crimson-black border-gold shadow-2xl text-2xl font-black uppercase tracking-widest"
-              >
-                {loading ? 'Preparing...' : 'Create & Host'}
-              </button>
-              
-              <div className="space-y-3 px-2">
-                 <div className="flex items-start gap-3 opacity-30 group">
-                    <span className="text-gold mt-1">📜</span>
-                    <p className="text-[10px] italic leading-relaxed">As the Sultan, you will orchestrate the phases and verify the poetic credentials of your guests.</p>
-                 </div>
-              </div>
-              
-              <button 
-                onClick={() => setMode('join')} 
-                className="w-full text-[10px] uppercase font-black text-white/20 hover:text-white/40 tracking-widest transition-colors py-2"
-              >
-                I have a Room Code
-              </button>
-            </div>
-          )}
+          
+          <h1 className="text-7xl sm:text-9xl font-bold text-gold serif tracking-tight leading-none drop-shadow-2xl">
+            Mehfil-e-Khaas
+          </h1>
+          <p className="text-xl sm:text-2xl text-gold/60 italic font-serif">
+            "A Social Deduction Game of Poetry & Betrayal."
+          </p>
         </div>
 
-        <div className="text-center text-xs text-gray-500 uppercase tracking-widest pt-8">
-          A Game of Sukhan-war & Naqal-baaz
+        <div className="flex flex-col sm:flex-row items-center gap-6 w-full max-w-lg">
+          <Link 
+            href="/host/setup" 
+            className="group relative w-full sm:w-1/2 overflow-hidden rounded-full p-[1px] transition-all hover:scale-[1.05] active:scale-[0.98]"
+          >
+            <div className="absolute inset-[-1000%] animate-[spin-slow_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#D4AF37_0%,#000_50%,#D4AF37_100%)]" />
+            <div className="inline-flex h-full w-full cursor-pointer items-center justify-center rounded-full bg-background px-8 py-4 text-lg font-black uppercase tracking-widest text-gold transition-colors group-hover:bg-transparent group-hover:text-background">
+              Create Room
+            </div>
+          </Link>
+
+          <Link 
+            href="/join" 
+            className="w-full sm:w-1/2 rounded-full border border-gold/40 px-8 py-4 text-lg font-black uppercase tracking-widest text-gold/80 hover:bg-gold/10 hover:text-gold transition-all hover:scale-[1.05] active:scale-[0.98] text-center"
+          >
+            Join Game
+          </Link>
         </div>
+
+        {/* Scroll Indicator or CTA for Rules */}
+        <button 
+          ref={rulesRef}
+          onClick={() => setShowRules(!showRules)}
+          className="group flex flex-col items-center gap-2 text-gold/30 hover:text-gold/60 transition-colors uppercase text-[10px] font-black tracking-[0.3em] mt-12 bg-transparent outline-none border-none"
+        >
+          <span>The Nizaam (Rules)</span>
+          <div className={`transition-all duration-700 ease-in-out ${showRules ? '-rotate-180 text-gold scale-125' : 'animate-bounce-slow'}`}>
+            <svg 
+              width="24" 
+              height="24" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+              className={showRules ? "drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]" : ""}
+            >
+              <path d="M7 13l5 5 5-5M7 6l5 5 5-5"/>
+            </svg>
+          </div>
+        </button>
+      </section>
+
+      {/* Rules Section (The Nizaam) */}
+      <section className={`w-full max-w-6xl px-6 transition-all duration-700 ease-in-out ${showRules ? 'opacity-100 max-h-[2000px] mb-20' : 'opacity-0 max-h-0 overflow-hidden'}`}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {rules.map((rule, idx) => (
+            <div 
+              key={idx} 
+              className="group glass p-8 rounded-4xl border border-gold/10 hover:border-gold/30 transition-all hover:translate-y-[-8px] duration-500"
+            >
+              <div className="text-4xl mb-6 bg-gold/10 w-16 h-16 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                {rule.icon}
+              </div>
+              <h3 className="text-2xl font-bold text-gold serif mb-4">{rule.title}</h3>
+              <p className="text-gray-400 leading-relaxed font-light italic">
+                {rule.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="w-full p-8 border-t border-white/5 flex flex-col items-center justify-center space-y-4">
+        <p className="text-white/20 text-[10px] uppercase font-black tracking-[0.4em] text-center">
+          Bringing the magic of the Mushaira to the digital age.<br/>
+          Built for the lovers of Sukhan and the soul of Hyderabadi gatherings.<br/>
+          Built with ❤️ by Vikas Bandaru
+        </p>
+        <div className="flex gap-6 opacity-20 hover:opacity-100 transition-opacity">
+          {/* Optional: Add social/github links here */}
+          <div className="h-1 w-1 rounded-full bg-gold"></div>
+          <div className="h-1 w-1 rounded-full bg-gold"></div>
+          <div className="h-1 w-1 rounded-full bg-gold"></div>
+        </div>
+      </footer>
+
+      {/* Background Ambience */}
+      <div className="fixed inset-0 pointer-events-none opacity-20 -z-10">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-gold/10 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-gold/5 blur-[120px] rounded-full"></div>
       </div>
     </main>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-crimson-black flex items-center justify-center text-gold">Loading...</div>}>
-      <HomeContent />
-    </Suspense>
   );
 }

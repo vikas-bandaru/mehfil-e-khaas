@@ -29,12 +29,15 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 🎭 Roles & Access
 The application is designed to be played across multiple devices simultaneously:
+- **Cinematic Landing Page**: A premium "Royal Nocturne" portal for players and hosts.
+- **Host Setup (`/host/setup`)**: Dedicated flow for the Sultan to host a new Mehfil.
+- **Join Portal (`/join`)**: Streamlined experience for guests to enter the game.
 - **Host Dashboard**: Control the game flow with the Sultan's Teleprompter—a live guide for first-time hosts.
 - **Player Mobile View**: Each player's private screen, fully optimized for touch with 44px targets and session recovery (Refresh Guard).
 - **Public Display**: The "Source of Truth" showing collective status and cinematic reveals.
 
 ## 🛠️ Tech Stack
-- **Framework**: Next.js 14+ (App Router)
+- **Framework**: Next.js 16+ (App Router, Turbopack)
 - **Database/Real-time**: Supabase
-- **Styling**: Tailwind CSS
+- **Styling**: Vanilla CSS (Premium "Royal Nocturne" System)
 - **State Management**: React Hooks + Supabase Realtime Subscriptions

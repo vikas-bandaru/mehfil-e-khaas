@@ -3,20 +3,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050505;
+  --foreground: #ffffff;
+  --gold: #D4AF37;
+  --gold-muted: rgba(212, 175, 55, 0.4);
+  --charcoal: #0a0a0a;
   --emerald-deep: #064E3B;
   --crimson-black: #1A0505;
-  --gold-accent: #D4AF37;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #020202;
     --foreground: #ffffff;
-    --gold: #FFD700;
-    --crimson-black: #1A0A0A;
-    --emerald-deep: #06402B;
+    --gold: #D4AF37;
+    --charcoal: #050505;
   }
 }
 
@@ -39,11 +40,11 @@ h1, h2, h3, .serif {
 }
 
 .text-gold {
-  color: var(--gold-accent);
+  color: var(--gold);
 }
 
 .border-gold {
-  border-color: var(--gold-accent);
+  border-color: var(--gold);
 }
 
 /* Glassmorphism utility */
