@@ -36,6 +36,18 @@ The application is designed to be played across multiple devices simultaneously:
 - **Player Mobile View**: Each player's private screen, fully optimized for touch with 44px targets and session recovery (Refresh Guard).
 - **Public Display**: The "Source of Truth" showing collective status and cinematic reveals.
 
+## 🕯️ Key Features
+- **The Gathering**: Multi-game session tracking with persistent `Gathering Gold`.
+- **Eidi Pot**: Dynamic collective pot that can be sabotaged by Plagiarists.
+- **Verification Engine**: Players can verify the final pot distribution at the end of each game.
+- **Session Recovery**: Refresh Guard ensures no one loses their role or status.
+
+## 🕯️ Key Features
+- **The Gathering**: Multi-game session tracking with persistent `Gathering Gold`.
+- **Eidi Pot**: Dynamic collective pot that can be sabotaged by Plagiarists.
+- **Verification Engine**: Players can verify the final pot distribution at the end of each game.
+- **Session Recovery**: Refresh Guard ensures no one loses their role or status.
+
 ## 🛠️ Tech Stack
 - **Framework**: Next.js 16+ (App Router, Turbopack)
 - **Database/Real-time**: Supabase

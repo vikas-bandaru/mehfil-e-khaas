@@ -139,6 +139,15 @@ export default function HostDashboard() {
 
   const maxVotes = Math.max(...Object.values(voteTallies), 0);
   const mostVotedPlayers = (alivePlayers.length === 2 && maxVotes === 0) ? alivePlayers : alivePlayers.filter(p => (voteTallies[p.id] || 0) === maxVotes && maxVotes > 0);
+
+  const topAliveVictors = useMemo(() => {
+    if (!gameState?.winner_faction) return [];
+    const winningRole = gameState.winner_faction === 'poets' ? 'sukhan_war' : 'naqal_baaz';
+    const factionAlive = players.filter(p => p.role === winningRole && p.status === 'alive');
+    if (factionAlive.length === 0) return [];
+    const maxScore = Math.max(...factionAlive.map(p => p.private_gold || 0));
+    return factionAlive.filter(p => (p.private_gold || 0) === maxScore);
+  }, [players, gameState?.winner_faction]);
   const isTie = alivePlayers.length === 2 
     ? (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol)
     : isVotesLocked && mostVotedPlayers.length > 1 && (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol);
@@ -224,13 +233,11 @@ export default function HostDashboard() {
     
     try {
         // Auto Win Condition Check before critical transitions
-        if (nextPhase === 'night' || (gameState?.current_phase === 'night' && nextPhase === 'mission')) {
+        if (nextPhase === 'end' || nextPhase === 'night' || (gameState?.current_phase === 'night' && nextPhase === 'mission')) {
             const winner = await evaluateWinCondition(roomId);
             if (winner) {
                 await supabase.from('game_rooms').update({ current_phase: 'end', winner_faction: winner }).eq('id', roomId);
-                if (winner === 'poets') {
-                    await liquidatePot(roomId);
-                }
+                await liquidatePot(roomId, winner);
                 return;
             }
         }
@@ -390,6 +397,12 @@ export default function HostDashboard() {
     
     // Reset tie protocol after banishment
     await supabase.from('game_rooms').update({ tie_protocol: 'none', tied_player_ids: [] }).eq('id', roomId);
+    
+    // Check win condition immediately after banishment
+    const winner = await evaluateWinCondition(roomId!);
+    if (winner) {
+        await handleTransition('end');
+    }
   };
 
   const handleTieProtocolSelect = async (protocol: 'decree' | 'revote' | 'spin') => {
@@ -488,6 +501,44 @@ export default function HostDashboard() {
   const handleStartMission = async () => {
     if (!roomId) return;
     await startMission(roomId);
+  };
+
+  const handleResetGame = async () => {
+    if (!roomId) return;
+    
+    try {
+      // 1. Reset Local State (Instant UI Response)
+      // This is critical to prevent the UI from flickering old state before the DB syncs
+      setVotes([]);
+      setNightVotes([]);
+      setIsVotesLocked(false);
+      setBanishedPlayerId(null);
+      setMissionOutcome(null);
+      setActiveMission(null); // Clear previous mission details
+      setSilenceConfirmed(false);
+      setIsBanishmentConfirmed(false);
+      setIsVerifying(false);
+      
+      // 2. Optimistic Phase Reset
+      // Force the Sultan's view to Lobby immediately
+      setGameState(prev => prev ? { 
+        ...prev, 
+        current_phase: 'lobby', 
+        eidi_pot: 0, 
+        current_round: 0, 
+        current_mission_id: null,
+        winner_faction: null,
+        mission_timer_end: null
+      } : null);
+
+      // 3. Reset Database State
+      await resetGame(roomId);
+      
+      console.log("Game Reset Successfully");
+    } catch (err: any) {
+      console.error("Reset Error:", err);
+      alert("Error resetting game: " + err.message);
+    }
   };
 
   const handleEmergencyReset = async () => {
@@ -1256,23 +1307,78 @@ export default function HostDashboard() {
                 </div>
               )}
 
-              {phase === 'end' && (
-                <div className="space-y-4">
-                    <div className="p-8 bg-gold/20 rounded-3xl border-4 border-gold/40 text-center mb-6 shadow-2xl">
-                        <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
-                  {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
-                </h2>
-                        <p className="text-gold/60 uppercase text-[10px] font-black tracking-widest border-t border-gold/20 pt-4">Final Eidi Pot: ₹{gameState.eidi_pot}</p>
+              
+              {phase === 'payout' && (
+                <div className="space-y-6">
+                    <div className="p-8 bg-emerald-900/40 rounded-3xl border-4 border-emerald-400/30 text-center mb-6 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse" />
+                        <h2 className="text-6xl font-black serif text-white uppercase tracking-tighter italic mb-2">Final Gathering Payout</h2>
+                        <p className="text-emerald-400/60 uppercase text-xs font-black tracking-[0.3em]">The Mehfil concludes and the Sultan rewards his poets</p>
+                        
+                        <div className="mt-10 space-y-3">
+                            {players.sort((a, b) => (b.gathering_gold || 0) - (a.gathering_gold || 0)).map((p, idx) => (
+                                <div key={p.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 hover:border-white/20 transition-all">
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-emerald-400 font-black text-xl w-8">#{idx + 1}</span>
+                                        <span className="text-white font-bold text-lg">{p.name} {p.status === 'banished' ? '👻' : ''}</span>
+                                    </div>
+                                    <div className="text-gold font-mono text-2xl font-black">₹{p.gathering_gold || 0}</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    <button onClick={() => resetGame(roomId!)} className="btn-premium w-full bg-emerald-600 py-5 rounded-2xl border-emerald-500 shadow-xl">Play Again</button>
+                    <button 
+                        onClick={handleResetGame}
+                        className="btn-premium w-full bg-emerald-600 py-6 rounded-2xl border-emerald-500 shadow-xl text-xl font-black uppercase tracking-[0.2em]"
+                    >
+                        Start New Game in Room
+                    </button>
+                    <button 
+                        onClick={() => router.push('/')} 
+                        className="btn-premium w-full bg-white/10 text-white/40 py-4 rounded-xl border-white/10 text-sm font-black uppercase tracking-[0.2em]"
+                    >
+                        Exit to Main Menu
+                    </button>
                     <button 
                         onClick={async () => {
-                            if (gameState.winner_faction === 'poets') {
-                                await liquidatePot(roomId!);
-                            }
-                            await deleteRoom(roomId!);
-                            router.push('/');
-                        }} 
+                          await deleteRoom(roomId!);
+                          router.push('/');
+                        }}
+                        className="w-full text-white/20 text-[10px] uppercase font-bold tracking-widest mt-4 hover:text-red-500 transition-colors"
+                    >
+                        Destroy Room & Exit
+                    </button>
+                </div>
+              )}
+
+              {phase === 'end' && (
+                <div className="space-y-4">
+                    <div className="p-8 bg-gold/20 rounded-3xl border-4 border-gold/40 text-center mb-6 shadow-2xl space-y-6">
+                        <div className="space-y-2">
+                             <h2 className="text-7xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
+                                {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 
+                                 gameState.winner_faction === 'plagiarists' ? 'The Naqal-baaz (Plagiarists) rule the City!' : 'The Mehfil Concludes'}
+                             </h2>
+                             <p className="text-gold/60 uppercase text-[10px] font-black tracking-widest border-t border-gold/20 pt-4">Final Eidi Pot: ₹{gameState.eidi_pot > 0 ? gameState.eidi_pot : gameState.last_game_pot}</p>
+                        </div>
+
+                        {topAliveVictors.length > 0 && (
+                            <div className="p-6 bg-gold/10 rounded-2xl border border-gold/30 animate-scale-up">
+                                <p className="text-[10px] text-gold font-black uppercase tracking-[0.3em] mb-4">✨ Supreme Victor ✨</p>
+                                <div className="flex flex-wrap justify-center gap-6">
+                                    {topAliveVictors.map(v => (
+                                        <div key={v.id} className="text-center">
+                                            <div className="text-4xl font-black serif italic text-white drop-shadow-lg">{v.name}</div>
+                                            <div className="text-gold font-mono font-bold">₹{v.private_gold}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <button onClick={handleResetGame} className="btn-premium w-full bg-emerald-600 py-5 rounded-2xl border-emerald-500 shadow-xl">Play Again</button>
+                    <button 
+                        onClick={() => handleTransition('payout')} 
                         className="btn-premium w-full bg-white/10 text-white/60 py-4 rounded-xl border-white/10 hover:bg-white/20 active:scale-95 transition-all"
                     >
                         End Gathering & Pay Out

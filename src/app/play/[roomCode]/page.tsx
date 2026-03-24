@@ -19,7 +19,6 @@ export default function PlayerClient() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && roomId && gameState) {
-        // Point 3: Clear revealed flag if it's the start of a new game (Round 1, Lobby/Reveal)
         if (gameState.current_round === 1 && (gameState.current_phase === 'lobby' || gameState.current_phase === 'reveal')) {
             localStorage.removeItem(`mehfil_role_revealed_${roomId}`);
             setShowRole(false);
@@ -48,7 +47,6 @@ export default function PlayerClient() {
     setPlayerId(localStorage.getItem('playerId'));
   }, []);
 
-  // Fetch Mission Details
   useEffect(() => {
     if (gameState?.current_mission_id) {
       const fetchMission = async () => {
@@ -65,7 +63,6 @@ export default function PlayerClient() {
     }
   }, [gameState?.current_mission_id]);
 
-  // Reset local voted state if votes are cleared in DB (for Re-Vote)
   useEffect(() => {
     if (roomId && playerId && gameState?.current_phase === 'majlis') {
         const checkVote = async () => {
@@ -84,7 +81,6 @@ export default function PlayerClient() {
         };
         checkVote();
 
-        // Subscribe to vote changes for this user
         const channel = supabase.channel(`user-votes:${playerId}`)
             .on('postgres_changes', { 
                 event: '*', 
@@ -125,7 +121,6 @@ export default function PlayerClient() {
   const me = players.find(p => p.id === playerId);
   const isTraitor = me?.role === 'naqal_baaz';
 
-  // Realtime subscription for coordination & sabotage signals
   useEffect(() => {
     if ((gameState?.current_phase === 'night' || gameState?.current_phase === 'mission' || gameState?.current_phase === 'majlis') && roomId) {
         const fetchVotes = async () => {
@@ -202,16 +197,14 @@ export default function PlayerClient() {
   const handleSabotageTrigger = async () => {
     if (!roomId || !playerId || gameState?.sabotage_used || isSignaling) return;
     
-    // Check if I already signaled
     const alreadySignaled = votes.some(v => v.voter_id === playerId && v.round_id === 0);
     if (alreadySignaled) return;
 
     setIsSignaling(true);
-    // Use votes table with round_id: 0 for mission sabotage signals
     const { error } = await supabase.from('votes').insert([{
         room_id: roomId,
         voter_id: playerId,
-        target_id: playerId, // Valid player ID as target
+        target_id: playerId, 
         round_id: 0
     }]);
 
@@ -225,7 +218,6 @@ export default function PlayerClient() {
     if (!roomId || !playerId || votedId === targetId) return;
     setVotedId(targetId);
     
-    // Using upsert for night_votes (room_id, voter_id is unique)
     const { error } = await supabase.from('night_votes').upsert([{
         room_id: roomId,
         voter_id: playerId,
@@ -265,7 +257,6 @@ export default function PlayerClient() {
     </div>
   );
 
-  // --- SILENCED OVERLAY (Zabaan-bandi) ---
   if (me.status === 'silenced') {
     return (
       <div className="fixed inset-0 z-[100] bg-red-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active overflow-hidden touch-none h-screen w-full">
@@ -288,7 +279,6 @@ export default function PlayerClient() {
     );
   }
 
-  // --- BANISHED OVERLAY (Spirit World) ---
   if (me.status === 'banished') {
     return (
       <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center animate-fade-enter-active overflow-hidden touch-none h-screen w-full">
@@ -306,7 +296,6 @@ export default function PlayerClient() {
     );
   }
 
-  // --- LOBBY PHASE ---
   if (gameState?.current_phase === 'lobby') {
     return (
       <main className="h-screen w-full overflow-hidden flex flex-col items-center justify-center text-center bg-emerald-deep text-white p-6 animate-fade-enter-active touch-none">
@@ -318,7 +307,6 @@ export default function PlayerClient() {
     );
   }
 
-  // --- REVEAL PHASE ---
   if (gameState?.current_phase === 'reveal') {
     return (
       <main 
@@ -356,7 +344,6 @@ export default function PlayerClient() {
     );
   }
 
-  // --- MISSION PHASE ---
   if (gameState?.current_phase === 'mission') {
     if (!gameState.mission_timer_end) {
       return (
@@ -406,7 +393,6 @@ export default function PlayerClient() {
             {activeMission ? (
               <section className="glass p-8 rounded-3xl border border-white/10 shadow-2xl bg-white/5 animate-fade-enter-active">
                   <h3 className="text-gold uppercase text-[10px] tracking-widest mb-2 font-black">Current Objective</h3>
-                  {/* Point 4: Hide details from Poets during blindfold */}
                   {isBlindfoldPhase && !isTraitor ? (
                       <div className="py-10 text-center space-y-4">
                           <div className="text-4xl animate-pulse grayscale opacity-20">📜</div>
@@ -433,7 +419,7 @@ export default function PlayerClient() {
                         disabled={!!mySabotageSignal || gameState.sabotage_used || isBlindfoldPhase || !gameState.mission_timer_end}
                         className={`btn-premium w-full py-6 rounded-2xl font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] transition-all font-mono min-h-[44px] ${
                             mySabotageSignal 
-                            ? 'bg-red-900/40 text-red-500/50 border-red-900/20' 
+                            ? 'bg-red-950/40 text-red-500/50 border-red-900/20' 
                             : 'bg-red-600 text-white border-red-400 active:scale-95'
                         }`}
                     >
@@ -469,14 +455,12 @@ export default function PlayerClient() {
     );
   }
 
-  // --- MAJLIS (VOTING) PHASE ---
   if (gameState?.current_phase === 'majlis') {
     return (
         <main className="min-h-screen bg-slate-950 text-white p-6 relative overflow-hidden">
             <RoleBadge />
             <GoldBadge />
 
-            {/* Tie Protocol Messaging */}
             {gameState.tie_protocol === 'decree' ? (
                 <div className="flex flex-col items-center justify-center h-full space-y-8 animate-fade-enter-active">
                      <div className="text-9xl animate-pulse">👑</div>
@@ -534,11 +518,9 @@ export default function PlayerClient() {
     );
   }
 
-  // --- NIGHT PHASE ---
   if (gameState?.current_phase === 'night') {
     const potentialVictims = players.filter(p => p.status === 'alive' && p.role === 'sukhan_war');
     
-    // Tally for Plagiarist coordination
     const tally = nightVotes.reduce((acc: any, v) => {
         acc[v.target_id] = (acc[v.target_id] || 0) + 1;
         return acc;
@@ -608,29 +590,71 @@ export default function PlayerClient() {
     );
   }
 
-  // --- END PHASE ---
+  if (gameState?.current_phase === 'payout') {
+      const sortedPlayers = [...players].sort((a, b) => (b.gathering_gold || 0) - (a.gathering_gold || 0));
+      const myRank = sortedPlayers.findIndex(p => p.id === playerId) + 1;
+
+      return (
+        <main className="min-h-screen bg-emerald-deep flex flex-col items-center justify-center p-8 text-center">
+            <div className="glass p-10 rounded-3xl border border-emerald-400/30 space-y-8 max-w-sm w-full">
+                <div className="space-y-2">
+                    <h1 className="text-5xl font-black serif italic text-white uppercase tracking-tighter">Gathering Payout</h1>
+                    <p className="text-emerald-400/60 uppercase text-[10px] font-black tracking-widest">The Sultan honors his poets</p>
+                </div>
+                
+                <div className="py-8 bg-black/20 rounded-2xl border border-white/5 space-y-2">
+                    <div className="text-6xl font-black text-gold font-mono drop-shadow-[0_0_15px_rgba(212,175,55,0.4)]">₹{me.gathering_gold || 0}</div>
+                    <div className="text-xs text-white/40 uppercase tracking-widest font-black">Your Total Wealth</div>
+                    <div className="inline-block mt-4 px-4 py-1 bg-emerald-500/20 rounded-full text-emerald-400 text-[10px] font-black uppercase tracking-widest">Rank #{myRank} in the Mehfil</div>
+                </div>
+
+                <p className="text-white/60 text-xs italic">The coins jingle in your pouch as you leave the Sultan's court.</p>
+            </div>
+            <p className="mt-12 text-white/20 text-[10px] uppercase font-bold tracking-widest">Shukran. Until the next Mehfil.</p>
+        </main>
+      );
+  }
+
   if (gameState?.current_phase === 'end') {
     const winners = gameState.winner_faction;
     const iWon = (winners === 'poets' && !isTraitor) || (winners === 'plagiarists' && isTraitor);
+    
+    const topAliveVictors = (() => {
+        const winningRole = winners === 'poets' ? 'sukhan_war' : 'naqal_baaz';
+        const factionAlive = players.filter(p => p.role === winningRole && p.status === 'alive');
+        if (factionAlive.length === 0) return [];
+        const maxScore = Math.max(...factionAlive.map(p => p.private_gold || 0));
+        return factionAlive.filter(p => (p.private_gold || 0) === maxScore);
+    })();
+    
+    const amISupreme = topAliveVictors.some(v => v.id === playerId);
 
     return (
       <main className={`min-h-screen flex flex-col items-center justify-center p-8 text-center ${iWon ? 'bg-emerald-deep' : 'bg-red-950'}`}>
         <div className="glass p-10 rounded-3xl border border-white/20 animate-scale-up space-y-6">
-            <h1 className="text-6xl font-black serif italic text-gold uppercase">{iWon ? 'Victory' : 'Defeat'}</h1>
+            <h1 className="text-6xl font-black serif italic text-gold uppercase">
+                {amISupreme ? '✨ Supreme Victor ✨' : (iWon ? 'Victory' : 'Defeat')}
+            </h1>
             <p className="text-white text-xl uppercase tracking-widest font-black opacity-80 decoration-gold underline underline-offset-8">
-                The {winners} have prevailed
+                {amISupreme ? 'Your verses have conquered the Mehfil' : `The ${winners} have prevailed`}
             </p>
             <div className="pt-10 space-y-6">
                 {winners === 'poets' && (
                    <div className="space-y-2 pb-6 border-b border-white/10">
-                       <div className="text-gold font-mono text-3xl font-black">₹{gameState.eidi_pot}</div>
+                       <div className="text-gold font-mono text-3xl font-black">₹{gameState.eidi_pot > 0 ? gameState.eidi_pot : (gameState.last_game_pot || 0)}</div>
                        <div className="text-[10px] text-white/40 uppercase tracking-widest">Total Khazana Secured</div>
                    </div>
                 )}
-                <div className="space-y-2">
-                    <div className="text-gold font-mono text-3xl font-black">₹{me.private_gold}</div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-widest">
-                        {!isTraitor ? 'Your Share of the Eidi' : 'Total Stolen from Sabotages'}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <div className="text-gold font-mono text-2xl font-black">₹{me.private_gold}</div>
+                        <div className="text-[8px] text-white/40 uppercase tracking-widest">
+                            {!isTraitor ? 'Game Share' : 'Sabotages'}
+                        </div>
+                    </div>
+                    <div className="space-y-2 border-l border-white/10 pl-4">
+                        <div className="text-emerald-400 font-mono text-2xl font-black">₹{me.gathering_gold || 0}</div>
+                        <div className="text-[8px] text-white/40 uppercase tracking-widest">Gathering Total</div>
                     </div>
                 </div>
             </div>
@@ -639,6 +663,5 @@ export default function PlayerClient() {
       </main>
     );
   }
-
   return null;
 }

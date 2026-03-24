@@ -22,7 +22,6 @@ export default function PublicDisplay() {
   }, []);
 
   useEffect(() => {
-    // Reset the buzzer flag when a new mission starts or phase changes
     hasPlayedRef.current = false;
   }, [gameState?.mission_timer_end, phase]);
 
@@ -46,7 +45,6 @@ export default function PublicDisplay() {
     if (hasPlayedRef.current) return;
     hasPlayedRef.current = true;
 
-    console.log("🔊 MISSION TIMER OVER - PLAYING BUZZER");
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (audioCtx.state === 'suspended') {
@@ -75,7 +73,6 @@ export default function PublicDisplay() {
     if (phase === 'mission' && timeLeft === 0 && !hasPlayedRef.current && gameState?.mission_timer_end) {
       const now = Date.now();
       const target = new Date(gameState.mission_timer_end).getTime();
-      // Only play if the timer has effectively reached zero naturally
       if (now >= target - 1000) {
         playBuzzer();
       }
@@ -90,10 +87,8 @@ export default function PublicDisplay() {
   return (
     <main className="min-h-screen bg-crimson-black text-white flex flex-col overflow-hidden">
       
-      {/* TOP DECORATIVE BAR */}
       <div className="h-2 bg-gradient-to-r from-gold via-emerald-deep to-gold w-full" />
 
-      {/* HEADER SECTION */}
       <header className="p-8 lg:p-16 flex justify-between items-start">
         <div className="space-y-4">
             <h1 className="text-7xl lg:text-9xl font-black serif text-gold tracking-tighter uppercase leading-none italic drop-shadow-2xl">Mehfil-e-Khaas</h1>
@@ -109,7 +104,6 @@ export default function PublicDisplay() {
         </div>
       </header>
 
-      {/* CENTRAL MESSAGE AREA */}
       <div className="flex-1 flex flex-col items-center justify-center text-center p-10 relative">
         
         {phase === 'lobby' && (
@@ -226,7 +220,6 @@ export default function PublicDisplay() {
                          <h2 className="text-6xl lg:text-8xl font-black italic serif text-red-500 uppercase tracking-tighter">The Pen of Fate</h2>
                          
                          <div className="relative w-[600px] h-[600px] flex items-center justify-center">
-                            {/* Tied Players in a Circle */}
                             {gameState.tied_player_ids?.map((id, i) => {
                                 const p = players.find(p => p.id === id);
                                 const angle = (i * 360) / (gameState.tied_player_ids?.length || 1);
@@ -244,7 +237,6 @@ export default function PublicDisplay() {
                                 );
                             })}
 
-                            {/* The Spinning Pen */}
                             <div className="w-64 h-64 relative animate-spin-slow duration-[3000ms]">
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-48 bg-gradient-to-b from-red-600 via-gold to-transparent rounded-full shadow-[0_0_30px_rgba(255,0,0,0.5)]">
                                     <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl">✒️</div>
@@ -270,74 +262,101 @@ export default function PublicDisplay() {
             </div>
         )}
 
-        {phase === 'end' && (
-            <div className="space-y-12 animate-scale-up w-full max-w-6xl">
-                <div className="text-[12rem] mb-1 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
-                <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
-                  {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
-                </h2>
-
-                {gameState.winner_faction === 'poets' && (
-                    <div className="mt-8 space-y-4 animate-fade-enter-active">
-                        <p className="text-4xl font-serif text-white/80 italic leading-relaxed">
-                            "Saff-e-Matam Na Bichao Ke Sukhan Zinda Hai,<br/>
-                            Ahl-e-Zauq Dekh Lo, Har Lafz-e-Kohan Zinda Hai."
-                        </p>
-                        <p className="text-sm uppercase tracking-[0.4em] text-gold/40 font-black">
-                            (Do not mourn, for the Word is alive; O people of taste, see that every ancient verse still lives.)
-                        </p>
-                    </div>
-                )}
-                
-                <div className="grid grid-cols-1 gap-4 pt-10">
-                    <div className="flex justify-between items-end border-b border-gold/10 pb-4 mb-4">
-                        <h3 className="text-gold/40 uppercase tracking-[0.5em] font-black text-xs">Final Wealth Distribution</h3>
-                        <div className="text-right">
-                           <div className="text-[10px] text-white/40 uppercase font-black tracking-widest">Total Eidi Pot</div>
-                           <div className="text-4xl font-black text-white italic serif">₹{gameState.eidi_pot}</div>
-                        </div>
+        {phase === 'payout' && (
+            <div className="min-h-screen bg-emerald-950 flex items-center justify-center p-20 overflow-hidden relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse" />
+                <div className="max-w-6xl w-full glass rounded-[4rem] p-20 border border-emerald-400/20 space-y-16 animate-scale-up">
+                    <div className="text-center space-y-4">
+                        <h1 className="text-9xl font-black serif italic text-white uppercase tracking-tighter drop-shadow-2xl">The Royal Payout</h1>
+                        <p className="text-emerald-400 text-2xl uppercase tracking-[0.5em] font-black drop-shadow-glow">A Gathering to Remember</p>
                     </div>
 
-                    <div className="space-y-4">
-                        {[...players].sort((a, b) => (b.private_gold || 0) - (a.private_gold || 0)).map((p, i) => {
-                            const isWinner = p.role === 'sukhan_war' && p.status === 'alive';
-                            const isPlagiarist = p.role === 'naqal_baaz';
-                            
-                            return (
-                                <div key={p.id} className={`glass flex items-center justify-between p-6 rounded-2xl border transition-all duration-700 ${isWinner ? 'bg-gold/10 border-gold/40 scale-105 shadow-[0_0_30px_rgba(255,215,0,0.2)]' : 'border-white/5 opacity-60'}`}>
-                                    <div className="flex items-center gap-6">
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl ${i === 0 ? 'bg-gold text-black' : 'bg-white/10 text-white'}`}>
-                                            #{i + 1}
-                                        </div>
-                                        <div className="text-left">
-                                            <div className={`text-4xl font-black serif italic ${isWinner ? 'text-white' : 'text-white/60'}`}>{p.name}</div>
-                                            <div className="flex gap-3 items-center mt-1">
-                                                <span className={`text-[10px] uppercase font-black tracking-widest ${isPlagiarist ? 'text-red-500' : 'text-emerald-500'}`}>{p.role.replace('_', ' ')}</span>
-                                                <span className="w-1 h-1 rounded-full bg-white/20" />
-                                                <span className="text-[10px] uppercase font-black tracking-widest text-white/40">{p.status}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="text-right">
-                                        <div className={`text-5xl font-black italic serif ${isWinner ? 'text-gold' : isPlagiarist && (p.private_gold || 0) > 0 ? 'text-red-500' : 'text-white/40'}`}>
-                                            ₹{p.private_gold || 0}
-                                        </div>
-                                        <div className="text-[10px] uppercase font-black text-white/20 tracking-tighter mt-1">
-                                            {isWinner ? 'Total Eidi + Share' : isPlagiarist ? 'Stolen Black Money' : 'Khazana Secured'}
-                                        </div>
-                                    </div>
+                    <div className="grid grid-cols-2 gap-10">
+                        {players.sort((a,b) => (b.gathering_gold || 0) - (a.gathering_gold || 0)).slice(0, 8).map((p, idx) => (
+                            <div key={p.id} className="flex items-center justify-between p-8 bg-white/5 rounded-3xl border border-white/10 shadow-2xl">
+                                <div className="flex items-center gap-8">
+                                    <span className="text-emerald-400 font-black text-4xl italic">#{idx+1}</span>
+                                    <span className="text-white text-3xl font-bold">{p.name} {p.status === 'banished' ? '👻' : ''}</span>
                                 </div>
-                            );
-                        })}
+                                <div className="text-gold font-mono text-5xl font-black">₹{p.gathering_gold || 0}</div>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="text-center">
+                    <p className="text-white/20 text-xs uppercase tracking-[0.3em] font-black">End of Information • Shukran</p>
                     </div>
                 </div>
             </div>
         )}
 
+        {phase === 'end' && (
+                <div className="space-y-12 animate-scale-up w-full max-w-6xl">
+                    <div className="text-[12rem] mb-1 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
+                    <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
+                    {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
+                    </h2>
+
+                    {gameState.winner_faction === 'poets' && (
+                        <div className="mt-8 space-y-4 animate-fade-enter-active">
+                            <p className="text-4xl font-serif text-white/80 italic leading-relaxed">
+                                "Saff-e-Matam Na Bichao Ke Sukhan Zinda Hai,<br/>
+                                Ahl-e-Zauq Dekh Lo, Har Lafz-e-Kohan Zinda Hai."
+                            </p>
+                            <p className="text-sm uppercase tracking-[0.4em] text-gold/40 font-black">
+                                (Do not mourn, for the Word is alive; O people of taste, see that every ancient verse still lives.)
+                            </p>
+                        </div>
+                    )}
+                    
+                    <div className="grid grid-cols-1 gap-4 pt-10">
+                        <div className="flex justify-between items-end border-b border-gold/10 pb-4 mb-4">
+                            <h3 className="text-gold/40 uppercase tracking-[0.5em] font-black text-xs">Final Wealth Distribution</h3>
+                            <div className="text-right">
+                            <div className="text-[10px] text-white/40 uppercase font-black tracking-widest">Total Eidi Pot</div>
+                            <div className="text-4xl font-black text-white italic serif">₹{gameState.eidi_pot > 0 ? gameState.eidi_pot : (gameState.last_game_pot || 0)}</div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {[...players].sort((a, b) => (b.private_gold || 0) - (a.private_gold || 0)).map((p, i) => {
+                                const isWinner = p.role === 'sukhan_war' && p.status === 'alive';
+                                const isPlagiarist = p.role === 'naqal_baaz';
+                                
+                                return (
+                                    <div key={p.id} className={`glass flex items-center justify-between p-6 rounded-2xl border transition-all duration-700 ${isWinner ? 'bg-gold/10 border-gold/40 scale-105 shadow-[0_0_30px_rgba(255,215,0,0.2)]' : 'border-white/5 opacity-60'}`}>
+                                        <div className="flex items-center gap-6">
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl ${i === 0 ? 'bg-gold text-black' : 'bg-white/10 text-white'}`}>
+                                                #{i + 1}
+                                            </div>
+                                            <div className="text-left">
+                                                <div className={`text-4xl font-black serif italic ${isWinner ? 'text-white' : 'text-white/60'}`}>{p.name}</div>
+                                                <div className="flex gap-3 items-center mt-1">
+                                                    <span className={`text-[10px] uppercase font-black tracking-widest ${isPlagiarist ? 'text-red-500' : 'text-emerald-500'}`}>{p.role.replace('_', ' ')}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-white/20" />
+                                                    <span className="text-[10px] uppercase font-black tracking-widest text-white/40">{p.status}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="text-right">
+                                            <div className={`text-5xl font-black italic serif ${isWinner ? 'text-gold' : isPlagiarist && (p.private_gold || 0) > 0 ? 'text-red-500' : 'text-white/40'}`}>
+                                                ₹{p.private_gold || 0}
+                                            </div>
+                                            <div className="text-[10px] uppercase font-black text-white/20 tracking-tighter mt-1">
+                                                {isWinner ? 'Total Eidi + Share' : isPlagiarist ? 'Stolen Black Money' : 'Khazana Secured'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
       </div>
 
-      {/* FOOTER: LIVE POT STATUS */}
       <footer className="p-8 lg:p-16 border-t border-white/5 flex justify-between items-end bg-black/60 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
         <div className="flex flex-col gap-6">
             <div className="flex items-center gap-4">
@@ -351,14 +370,12 @@ export default function PublicDisplay() {
         <div className="flex items-center gap-12">
             <div className="text-right">
                 <div className="text-[10px] uppercase font-black text-gold/40 tracking-widest mb-2 font-mono">Real-time Pot Balance</div>
-                <div className="text-7xl font-black text-gold drop-shadow-[0_0_20px_rgba(255,215,0,0.3)]">₹{gameState.eidi_pot}</div>
+                <div className="text-7xl font-black text-gold drop-shadow-[0_0_20px_rgba(255,215,0,0.3)]">₹{phase === 'lobby' ? 0 : (gameState.eidi_pot > 0 ? gameState.eidi_pot : (gameState.last_game_pot || 0))}</div>
             </div>
         </div>
       </footer>
-      {/* CINEMATIC REVEAL: Zabaan-bandi */}
       {gameState.is_revealing && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-20 text-center animate-fade-enter-active">
-            {/* Background Crimson Glow */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(220,38,38,0.2)_0%,transparent_70%)] animate-pulse" />
             
             <div className="relative space-y-12 animate-scale-up">
