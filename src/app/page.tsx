@@ -1,12 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 
 export default function LandingPage() {
   const [showRules, setShowRules] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const rulesRef = useRef<HTMLButtonElement>(null);
+
+  // Force scroll to top and disable restoration on mount
+  useLayoutEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     // Sticky menu scroll listener
@@ -19,13 +27,14 @@ export default function LandingPage() {
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (entry.isIntersecting) {
+        // Trigger only if intersecting AND the user has scrolled from the top
+        if (entry.isIntersecting && window.scrollY > 50) {
           setShowRules(true);
         }
       },
       { 
-        threshold: 1.0, // Trigger when the entire button is visible
-        rootMargin: '0px 0px -10% 0px' // Offset to trigger slightly before it hits the bottom
+        threshold: 1.0,
+        rootMargin: '0px 0px -10% 0px'
       }
     );
 
