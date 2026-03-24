@@ -1,12 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 
 export default function LandingPage() {
   const [showRules, setShowRules] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const rulesRef = useRef<HTMLButtonElement>(null);
+
+  // Force scroll to top and disable restoration on mount
+  useLayoutEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     // Sticky menu scroll listener
