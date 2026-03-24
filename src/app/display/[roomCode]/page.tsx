@@ -261,7 +261,12 @@ export default function PublicDisplay() {
             <div className="space-y-8 animate-pulse text-gray-500">
                 <div className="text-[10rem] mb-10 opacity-30 select-none">🌙</div>
                 <h2 className="text-8xl font-black serif italic tracking-tighter">The City Sleeps...</h2>
-                <p className="text-xl uppercase tracking-[1em] font-black opacity-20">Silence descending upon Hyderabad</p>
+                <div className="overflow-hidden whitespace-nowrap border-y border-red-950/30 py-4 bg-red-950/10">
+                    <div className="inline-block animate-shimmer min-w-full">
+                        <span className="text-red-600/60 text-2xl uppercase tracking-[1em] font-black mx-20">"The court has fallen. The Plagiarists rule the night."</span>
+                        <span className="text-red-600/60 text-2xl uppercase tracking-[1em] font-black mx-20">"The court has fallen. The Plagiarists rule the night."</span>
+                    </div>
+                </div>
             </div>
         )}
 
@@ -269,7 +274,7 @@ export default function PublicDisplay() {
             <div className="space-y-12 animate-scale-up w-full max-w-6xl">
                 <div className="text-[12rem] mb-1 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
                 <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
-                  {gameState.winner_faction === 'poets' ? 'The Poets Have Prevailed' : 'The Plagiarists Rule the City'}
+                  {gameState.winner_faction === 'poets' ? 'The Poetic Order Restored' : 'The Plagiarists Rule the City'}
                 </h2>
 
                 {gameState.winner_faction === 'poets' && (

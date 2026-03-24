@@ -36,6 +36,8 @@ export default function HostDashboard() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [hostName, setHostName] = useState<string | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [isBanishmentConfirmed, setIsBanishmentConfirmed] = useState(false);
 
   useEffect(() => {
     setHostName(localStorage.getItem('playerName'));
@@ -236,6 +238,7 @@ export default function HostDashboard() {
             setBanishedPlayerId(null);
             setMissionOutcome(null);
             setSilenceConfirmed(false);
+            setIsBanishmentConfirmed(false);
             
             // Clear reveal state when moving to a new phase
             await supabase.from('game_rooms').update({ 
@@ -246,7 +249,17 @@ export default function HostDashboard() {
 
         // Optimistic UI Update
         console.log("Optimistic Transition to:", nextPhase);
-        setGameState(prev => prev ? { ...prev, current_phase: nextPhase } : null);
+        if (nextPhase === 'mission') {
+            const timerEnd = new Date();
+            timerEnd.setSeconds(timerEnd.getSeconds() + 150);
+            setGameState(prev => prev ? { 
+                ...prev, 
+                current_phase: nextPhase,
+                mission_timer_end: timerEnd.toISOString()
+            } : null);
+        } else {
+            setGameState(prev => prev ? { ...prev, current_phase: nextPhase, mission_timer_end: null } : null);
+        }
 
         await advancePhase(roomId, nextPhase);
     } catch (err: any) {
@@ -300,15 +313,36 @@ export default function HostDashboard() {
       return alert(`Minimum ${minRequired} players required to start.`);
     }
     
+    setIsAssigning(true);
     console.log("Starting game with", players.length, "players...");
     
-    const manualCount = gameState?.is_dev_mode ? devPlagiaristCount : undefined;
-    await assignRoles(roomId!, manualCount);
-    await handleTransition('reveal');
+    // 1. Immediate Optimistic UI Update for the Sultan
+    // This ensures the Teleprompter updates and the button changes INSTANTLY
+    setGameState(prev => prev ? { ...prev, current_phase: 'reveal' } : null);
     
-    // Tutorial Completion
-    localStorage.setItem('hasSeenHostTutorial', 'true');
-    setShowTooltips(false);
+    const manualCount = gameState?.is_dev_mode ? devPlagiaristCount : undefined;
+    
+    try {
+      console.log("Assigning roles...");
+      await assignRoles(roomId!, manualCount);
+      
+      console.log("Advancing phase to reveal...");
+      await handleTransition('reveal');
+      
+      // Tutorial Completion
+      localStorage.setItem('hasSeenHostTutorial', 'true');
+      setShowTooltips(false);
+    } catch (err: any) {
+      console.error("Critical Game Start Failure:", err);
+      const errorMsg = err.message || JSON.stringify(err);
+      const errorDetails = err.details || "No further details.";
+      alert(`Critical Failure: ${errorMsg}\n\nDetails: ${errorDetails}\n\nThis is likely a Supabase RLS (Row Level Security) issue. Please ensure 'UPDATE' is enabled for the 'game_rooms' and 'players' tables.`);
+      
+      // Rollback on absolute failure
+      setGameState(prev => prev ? { ...prev, current_phase: 'lobby' } : null);
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   const toggleDevMode = async (enabled: boolean) => {
@@ -335,7 +369,18 @@ export default function HostDashboard() {
   const handleBanish = async (playerId?: string) => {
     const targetId = playerId || banishedPlayerId;
     if (!targetId) return;
-    await supabase.from('players').update({ status: 'banished' }).eq('id', targetId);
+    
+    // Optimistic Update
+    setIsBanishmentConfirmed(true);
+    
+    const { error } = await supabase.from('players').update({ status: 'banished' }).eq('id', targetId);
+    if (error) {
+        console.error("Banishment Failed:", error);
+        setIsBanishmentConfirmed(false);
+        alert("Banishment failed: " + error.message);
+        return;
+    }
+    
     // Reset tie protocol after banishment
     await supabase.from('game_rooms').update({ tie_protocol: 'none', tied_player_ids: [] }).eq('id', roomId);
   };
@@ -390,7 +435,10 @@ export default function HostDashboard() {
   };
 
   const handleVerifySabotage = async () => {
-    if (missionOutcome) return; // Already concluded
+    if (missionOutcome || !gameState) return; // Already concluded
+    
+    // Optimistic Update
+    setGameState(prev => prev ? { ...prev, sabotage_triggered: false } : null);
     
     // Award gold to plagiarists and update pot
     const plagiarists = players.filter(p => p.role === 'naqal_baaz' && p.status === 'alive');
@@ -398,11 +446,10 @@ export default function HostDashboard() {
       await supabase.from('players').update({ private_gold: (p.private_gold || 0) + 500 }).eq('id', p.id);
     }
     await supabase.from('game_rooms').update({ 
-        eidi_pot: (gameState!.eidi_pot || 0) + 1000, 
+        eidi_pot: (gameState.eidi_pot || 0) + 1000, 
         sabotage_triggered: false,
         sabotage_used: true
     }).eq('id', roomId);
-    // DO NOT set missionOutcome or clear timer here
   };
 
   const handleMissionSuccess = async () => {
@@ -605,7 +652,8 @@ export default function HostDashboard() {
                     {phase === 'mission' && gameState.mission_timer_end && "The challenge is set. Solve the couplet before the sand runs out. Speaker, state your case."}
                     {phase === 'majlis' && "Let the Majlis begin! The scent of a Plagiarist is in the air. Debate, discuss... and decide who leaves the court."}
                     {phase === 'night' && "The night deepens. Everyone, eyes closed. Plagiarists... choose the voice you wish to silence."}
-                    {phase === 'end' && gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The court has fallen. The Plagiarists rule the night."}
+                    {phase === 'end' ? (gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The Plagiarists have seized control. The court is lost.") 
+                     : (phase === 'night' ? "The court has fallen. The Plagiarists rule the night." : "The Sultan's word is law. Listen closely to the decree.") }
                  </p>
               </div>
             )}
@@ -922,10 +970,10 @@ export default function HostDashboard() {
                   <div className="relative z-20">
                     <button 
                       onClick={handleAssignRoles}
-                      disabled={players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
-                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${showTooltips && tutorialStep === 3 && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
+                      disabled={isAssigning || players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
+                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${isAssigning ? 'opacity-50 cursor-not-allowed' : ''} ${showTooltips && tutorialStep === 3 && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
                     >
-                      Assign Roles & Start
+                      {isAssigning ? 'Assigning Roles...' : 'Assign Roles & Start'}
                     </button>
                   </div>
                   {players.length < (gameState?.min_players_required ?? 4) && !gameState?.is_dev_mode && (
@@ -937,9 +985,10 @@ export default function HostDashboard() {
               {phase === 'reveal' && (
                 <button 
                     onClick={() => handleTransition('mission')}
-                    className="btn-premium w-full bg-gold text-crimson-black py-6 rounded-2xl border-gold/50 text-lg"
+                    disabled={gameState.current_mission_id !== null}
+                    className={`btn-premium w-full bg-gold text-crimson-black py-6 rounded-2xl border-gold/50 text-lg ${gameState.current_mission_id ? 'opacity-20 grayscale' : ''}`}
                 >
-                    Begin First Mission
+                    {gameState.current_mission_id ? 'Mission in Progress...' : 'Begin First Mission'}
                 </button>
               )}
 
@@ -969,10 +1018,10 @@ export default function HostDashboard() {
                     
                     <button 
                       onClick={handleVerifySabotage}
-                      disabled={timeLeft > 90 || !gameState.sabotage_triggered || !!missionOutcome}
+                      disabled={!gameState.sabotage_triggered || gameState.sabotage_used || !!missionOutcome}
                       className="btn-premium w-full bg-red-600/20 text-red-500 border-red-600/40 py-4 rounded-2xl disabled:opacity-20"
                     >
-                      Verify Sabotage {gameState.sabotage_triggered && "(Alert!)"}
+                      {gameState.sabotage_used ? "Sabotage Verified" : `Verify Sabotage ${gameState.sabotage_triggered ? "(Alert!)" : ""}`}
                     </button>
 
                     <button 
@@ -995,7 +1044,7 @@ export default function HostDashboard() {
                         {isVotesLocked ? "Votes Locked" : "Lock Votes & Reveal"}
                     </button>
                     
-                    {isVotesLocked && !isTie && gameState?.tie_protocol === 'none' && (
+                    {isVotesLocked && !isTie && gameState?.tie_protocol === 'none' && !isBanishmentConfirmed && (
                         <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
                             <p className="text-[10px] text-center text-gray-500 uppercase font-black tracking-widest">Select Player to Banish</p>
                             {mostVotedPlayers.map(p => (
@@ -1057,22 +1106,52 @@ export default function HostDashboard() {
 
                     {gameState?.tie_protocol === 'revote' && (
                         <div className="p-6 bg-emerald-950/40 rounded-3xl border-2 border-emerald-500/40 text-center space-y-3">
-                            <h3 className="text-emerald-500 font-black uppercase tracking-widest text-xs animate-pulse">Re-Vote in Progress</h3>
+                            <h3 className="text-emerald-500 font-black uppercase tracking-widest text-xs animate-pulse">
+                                {isVotesLocked ? "Re-Vote Results" : "Re-Vote in Progress"}
+                            </h3>
                             <p className="text-white/40 text-[10px]">Tied: {gameState.tied_player_ids?.map(id => players.find(p => p.id === id)?.name).join(' vs ')}</p>
-                            <div className="text-2xl font-black tabular-nums">{votes.length} / {alivePlayers.length}</div>
-                            <button 
-                                onClick={() => setIsVotesLocked(true)}
-                                disabled={votes.length < alivePlayers.length || isVotesLocked}
-                                className="btn-premium w-full bg-emerald-600 py-4 rounded-xl text-sm"
-                            >
-                                Lock Re-Votes
-                            </button>
+                            
+                            {!isVotesLocked ? (
+                                <>
+                                    <div className="text-2xl font-black tabular-nums">{votes.length} / {alivePlayers.length}</div>
+                                    <button 
+                                        onClick={() => setIsVotesLocked(true)}
+                                        disabled={votes.length < alivePlayers.length || isVotesLocked}
+                                        className="btn-premium w-full bg-emerald-600 py-4 rounded-xl text-sm"
+                                    >
+                                        Lock Re-Votes
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="space-y-3 pt-4 border-t border-white/10">
+                                    <p className="text-[10px] text-center text-gray-500 uppercase font-black tracking-widest">Select Player to Banish</p>
+                                    {mostVotedPlayers.map(p => (
+                                        <button key={p.id} onClick={() => setBanishedPlayerId(p.id)} className={`btn-premium w-full py-4 rounded-xl border ${banishedPlayerId === p.id ? 'bg-red-600 border-red-400' : 'bg-white/5 border-white/10'}`}>
+                                            Banish {p.name} ({votes.filter(v => v.target_id === p.id).length} votes)
+                                        </button>
+                                    ))}
+                                    <button 
+                                        onClick={() => handleBanish()}
+                                        disabled={!banishedPlayerId || isBanishmentConfirmed}
+                                        className="btn-premium w-full bg-red-600 py-4 rounded-xl border-red-500 disabled:opacity-20"
+                                    >
+                                        Confirm Banishment
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {isBanishmentConfirmed && (
+                        <div className="p-4 bg-red-600/10 rounded-2xl border border-red-500/40 text-center animate-pulse">
+                            <p className="text-red-500 font-bold uppercase tracking-widest text-xs">Banishment Executed</p>
+                            <p className="text-[10px] text-white/40 italic">The word has been struck from the books.</p>
                         </div>
                     )}
 
                     <button 
                         onClick={() => potentialWinner ? handleTransition('end') : handleTransition('night')}
-                        disabled={!players.some(p => p.status === 'banished') && !potentialWinner} 
+                        disabled={!isBanishmentConfirmed && !potentialWinner} 
                         className="btn-premium w-full bg-white text-black py-6 rounded-2xl border-gray-300 mt-4 text-lg"
                     >
                         {potentialWinner ? 'Reveal Scores (Victory!)' : 'Proceed to Night'}
@@ -1153,11 +1232,24 @@ export default function HostDashboard() {
               {phase === 'end' && (
                 <div className="space-y-4">
                     <div className="p-8 bg-gold/20 rounded-3xl border-4 border-gold/40 text-center mb-6 shadow-2xl">
-                        <h2 className="text-5xl font-black text-gold serif mb-3 uppercase tracking-tighter italic">{gameState.winner_faction} WIN!</h2>
+                        <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
+                  {gameState.winner_faction === 'poets' ? 'The Poetic Order Restored' : 'The Plagiarists Rule the City'}
+                </h2>
                         <p className="text-gold/60 uppercase text-[10px] font-black tracking-widest border-t border-gold/20 pt-4">Final Eidi Pot: ₹{gameState.eidi_pot}</p>
                     </div>
                     <button onClick={() => resetGame(roomId!)} className="btn-premium w-full bg-emerald-600 py-5 rounded-2xl border-emerald-500 shadow-xl">Play Again</button>
-                    <button onClick={() => deleteRoom(roomId!)} className="btn-premium w-full bg-white/5 text-gray-500 py-4 rounded-xl border-white/10">End Gathering</button>
+                    <button 
+                        onClick={async () => {
+                            if (gameState.winner_faction === 'poets') {
+                                await liquidatePot(roomId!);
+                            }
+                            await deleteRoom(roomId!);
+                            router.push('/');
+                        }} 
+                        className="btn-premium w-full bg-white/10 text-white/60 py-4 rounded-xl border-white/10 hover:bg-white/20 active:scale-95 transition-all"
+                    >
+                        End Gathering & Pay Out
+                    </button>
                 </div>
               )}
             </div>

@@ -47,8 +47,14 @@ export function usePlayers(roomId: string) {
       )
       .subscribe();
 
+    // 3. Polling Fallback
+    const pollInterval = setInterval(() => {
+      fetchPlayers();
+    }, 5000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [roomId]);
 

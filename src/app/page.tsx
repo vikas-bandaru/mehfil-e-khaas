@@ -97,7 +97,7 @@ function LandingContent() {
           <h1 className="text-7xl sm:text-9xl font-bold text-gold serif tracking-tight leading-none drop-shadow-2xl">
             Mehfil-e-Khaas
           </h1>
-          <p className="text-xl sm:text-2xl text-gold/60 italic font-serif">
+          <p className="text-xl sm:text-2xl text-white/60 italic font-serif">
             "A Social Deduction Game of Poetry & Betrayal."
           </p>
         </div>
@@ -125,7 +125,7 @@ function LandingContent() {
         <button 
           ref={rulesRef}
           onClick={() => setShowRules(!showRules)}
-          className="group flex flex-col items-center gap-2 text-gold/30 hover:text-gold/60 transition-colors uppercase text-[10px] font-black tracking-[0.3em] mt-12 bg-transparent outline-none border-none"
+          className="group flex flex-col items-center gap-2 text-white/30 hover:text-gold/60 transition-colors uppercase text-[10px] font-black tracking-[0.3em] mt-12 bg-transparent outline-none border-none"
         >
           <span>The Nizaam (Rules)</span>
           <div className={`transition-all duration-700 ease-in-out ${showRules ? '-rotate-180 text-gold scale-125' : 'animate-bounce-slow'}`}>

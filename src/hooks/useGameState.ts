@@ -54,6 +54,7 @@ export function useGameState(roomCode: string) {
     };
 
     fetchGameState().then(async () => {
+      console.log("Hook: Initial fetch complete for", roomCode);
       // Need the ID from the fetch to subscribe reliably
       const { data } = await supabase
         .from('game_rooms')
@@ -62,12 +63,21 @@ export function useGameState(roomCode: string) {
         .single();
         
       if (data?.id) {
+        console.log("Hook: Subscribing to room ID", data.id);
         startSubscription(data.id);
       }
     });
 
+    // 3. Polling Fallback (Every 5 seconds)
+    // Real-time can be flaky in some environments, polling ensures eventual consistency.
+    const pollInterval = setInterval(() => {
+      fetchGameState();
+    }, 5000);
+
     return () => {
+      console.log("Hook: Cleaning up for", roomCode);
       if (channel) supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [roomCode]);
 
