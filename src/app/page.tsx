@@ -19,13 +19,14 @@ export default function LandingPage() {
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (entry.isIntersecting) {
+        // Trigger only if intersecting AND the user has scrolled from the top
+        if (entry.isIntersecting && window.scrollY > 50) {
           setShowRules(true);
         }
       },
       { 
-        threshold: 1.0, // Trigger when the entire button is visible
-        rootMargin: '0px 0px -10% 0px' // Offset to trigger slightly before it hits the bottom
+        threshold: 1.0,
+        rootMargin: '0px 0px -10% 0px'
       }
     );
 
