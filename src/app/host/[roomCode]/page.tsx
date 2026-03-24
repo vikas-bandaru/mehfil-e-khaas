@@ -29,6 +29,7 @@ export default function HostDashboard() {
   const [showDevSettings, setShowDevSettings] = useState(false);
   const [isToolkitOpen, setIsToolkitOpen] = useState(false);
   const [showScript, setShowScript] = useState(false);
+  const [showTooltips, setShowTooltips] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [hostName, setHostName] = useState<string | null>(null);
 
@@ -246,6 +247,13 @@ export default function HostDashboard() {
     }
   };
 
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem('hasSeenHostTutorial');
+    if (hasSeenTutorial === null) {
+      setShowTooltips(true);
+    }
+  }, []);
+
   const handleAssignRoles = async () => {
     const minRequired = gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 8);
     if (players.length < minRequired) return alert(`Strict Rule: ${minRequired} players required to start.`);
@@ -253,6 +261,10 @@ export default function HostDashboard() {
     const manualCount = gameState?.is_dev_mode ? devPlagiaristCount : undefined;
     await assignRoles(roomId!, manualCount);
     await handleTransition('reveal');
+    
+    // Tutorial Completion
+    localStorage.setItem('hasSeenHostTutorial', 'true');
+    setShowTooltips(false);
   };
 
   const toggleDevMode = async (enabled: boolean) => {
@@ -395,7 +407,7 @@ export default function HostDashboard() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-4 items-center">
           {isHostAPlayer && (
             <button 
               onClick={() => window.open(`/play/${roomCode}`, '_blank')}
@@ -404,19 +416,36 @@ export default function HostDashboard() {
               Open My Player View 🖋️
             </button>
           )}
-          <button 
-            onClick={() => window.open(`/display/${roomCode}`, '_blank')}
-            className="btn-premium bg-gold/10 text-gold border-gold/40 px-6 py-4 rounded-full shadow-lg"
-          >
-            Open Public Display 📺
-          </button>
-          <button 
-            onClick={() => setIsToolkitOpen(true)}
-            className="w-12 h-12 rounded-full bg-gold text-background border-4 border-gold/50 flex items-center justify-center text-xl font-black shadow-lg hover:scale-110 active:scale-90 transition-all"
-            title="Host Toolkit"
-          >
-            ?
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => window.open(`/display/${roomCode}`, '_blank')}
+              className={`btn-premium bg-gold/10 text-gold border-gold/40 px-6 py-4 rounded-full shadow-lg relative ${showTooltips ? 'animate-pulse-gold' : ''}`}
+            >
+              Open Public Display 📺
+            </button>
+            {showTooltips && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-48 glass p-4 rounded-2xl border border-gold/30 shadow-2xl z-20 animate-bounce-subtle pointer-events-none">
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#050505] border-t border-l border-gold/30 rotate-45" />
+                <p className="text-[10px] font-bold text-gold uppercase mb-1 tracking-widest">Step 1: Cast</p>
+                <p className="text-xs text-white/90 leading-snug">Open this on a TV or Projector for the room.</p>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <button 
+              onClick={() => setIsToolkitOpen(true)}
+              className="w-12 h-12 rounded-full bg-gold text-background border-4 border-gold/50 flex items-center justify-center text-xl font-black shadow-lg hover:scale-110 active:scale-90 transition-all font-sans"
+              title="Host Toolkit"
+            >
+              ?
+            </button>
+            <button 
+              onClick={() => setShowTooltips(!showTooltips)}
+              className={`text-[8px] font-black uppercase tracking-tighter px-2 py-0.5 rounded-full border transition-all ${showTooltips ? 'bg-gold text-background border-gold' : 'bg-transparent text-gold/40 border-gold/20'}`}
+            >
+              Guide {showTooltips ? 'ON' : 'OFF'}
+            </button>
+          </div>
         </div>
       </div>
       
@@ -479,7 +508,16 @@ export default function HostDashboard() {
           
           <div className="flex justify-between items-center mb-8 relative z-10">
             <h2 className="text-2xl font-bold italic border-b-2 border-[#2c1810]/20 pb-1">The Sultan's Toolkit</h2>
-            <button onClick={() => setIsToolkitOpen(false)} className="text-2xl hover:scale-125 transition-transform">×</button>
+            <div className="flex gap-2 items-center">
+              <button 
+                onClick={() => setShowTooltips(!showTooltips)}
+                className={`w-6 h-6 rounded-full border border-[#2c1810]/20 flex items-center justify-center text-[8px] font-black transition-all ${showTooltips ? 'bg-[#8b0000] text-white border-[#8b0000]' : 'hover:bg-[#2c1810]/10'}`}
+                title="Toggle Guide"
+              >
+                i
+              </button>
+              <button onClick={() => setIsToolkitOpen(false)} className="text-2xl hover:scale-125 transition-transform">×</button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-8 relative z-10 custom-scrollbar pr-2">
@@ -574,8 +612,15 @@ export default function HostDashboard() {
           )}
 
           <section className="glass p-6 rounded-3xl border border-white/10 h-full">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 relative">
                 <h2 className="text-xl font-bold serif text-gold">Gathered Poets ({players.length}/{gameState.min_players_required ?? 8})</h2>
+                {showTooltips && (
+                  <div className="absolute top-full left-0 mt-2 w-56 glass p-4 rounded-2xl border border-gold/30 shadow-2xl z-20 animate-bounce-subtle pointer-events-none">
+                    <div className="absolute -top-2 left-8 w-4 h-4 bg-[#050505] border-t border-l border-gold/30 rotate-45" />
+                    <p className="text-[10px] font-bold text-gold uppercase mb-1 tracking-widest">Step 2: Gathering</p>
+                    <p className="text-xs text-white/90 leading-snug">Share the link. Wait for {gameState.min_players_required ?? 8} poets to join.</p>
+                  </div>
+                )}
                 <div className="text-sm font-mono text-gold/60">POT: ₹{gameState.eidi_pot}</div>
             </div>
 
@@ -692,13 +737,22 @@ export default function HostDashboard() {
                     </div>
                   )}
 
-                  <button 
-                    onClick={handleAssignRoles}
-                    disabled={players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
-                    className="btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all"
-                  >
-                    Assign Roles & Start
-                  </button>
+                  <div className="relative">
+                    <button 
+                      onClick={handleAssignRoles}
+                      disabled={players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
+                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${showTooltips && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
+                    >
+                      Assign Roles & Start
+                    </button>
+                    {showTooltips && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-56 glass p-4 rounded-2xl border border-gold/30 shadow-2xl z-20 animate-bounce-subtle pointer-events-none">
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#050505] border-b border-r border-gold/30 rotate-45" />
+                        <p className="text-[10px] font-bold text-gold uppercase mb-1 tracking-widest">Step 3: Start</p>
+                        <p className="text-xs text-white/90 leading-snug">Click once everyone is in. This starts the game!</p>
+                      </div>
+                    )}
+                  </div>
                   {players.length < (gameState?.min_players_required ?? 4) && !gameState?.is_dev_mode && (
                     <p className="text-center text-red-500 text-[10px] uppercase font-black tracking-widest mt-4 animate-pulse">Minimum {gameState?.min_players_required ?? 4} players required to start the Mehfil.</p>
                   )}
