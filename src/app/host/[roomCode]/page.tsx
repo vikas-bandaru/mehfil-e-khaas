@@ -8,6 +8,8 @@ import { usePlayers } from '@/hooks/usePlayers';
 import { advancePhase, assignRoles, evaluateWinCondition, resetGame, deleteRoom, startMission, liquidatePot, GamePhase, Player, Mission } from '@/lib/game-logic';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import * as Popover from '@radix-ui/react-popover';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function HostDashboard() {
   const { roomCode } = useParams() as { roomCode: string };
@@ -30,7 +32,9 @@ export default function HostDashboard() {
   const [isToolkitOpen, setIsToolkitOpen] = useState(false);
   const [showScript, setShowScript] = useState(false);
   const [showTooltips, setShowTooltips] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(1);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
   const [hostName, setHostName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -248,11 +252,42 @@ export default function HostDashboard() {
   };
 
   useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    
     const hasSeenTutorial = localStorage.getItem('hasSeenHostTutorial');
     if (hasSeenTutorial === null) {
       setShowTooltips(true);
+      setTutorialStep(1);
     }
+    
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const tutorialContent = [
+    {
+      step: 1,
+      title: "The Canvas",
+      heading: "Cast the Court",
+      text: "Open this on a TV or Projector so all poets can see the secret couplet.",
+      target: "Step 1: Open Public Display"
+    },
+    {
+      step: 2,
+      title: "The Gathering",
+      heading: "Assemble the Court",
+      text: `Invite poets using the room code. You need ${gameState?.min_players_required ?? 8} players to begin.`,
+      target: "Step 2: Join Link"
+    },
+    {
+      step: 3,
+      title: "The Decree",
+      heading: "Begin the Mehfil",
+      text: "Once everyone is here, click 'Assign Roles' to start the performance.",
+      target: "Step 3: Start Button"
+    }
+  ];
 
   const handleAssignRoles = async () => {
     const minRequired = gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 8);
@@ -381,7 +416,51 @@ export default function HostDashboard() {
   if (!gameState) return <div className="p-10 text-white">Room {roomCode} not found.</div>;
 
   return (
-    <main className="min-h-screen bg-crimson-black text-white p-4 lg:p-10 space-y-6">
+    <main className="min-h-screen bg-crimson-black text-white p-4 lg:p-10 space-y-6 relative">
+      {/* MOBILE ONBOARDING GUARD */}
+      <AnimatePresence>
+        {showTooltips && isMobile && (
+          <motion.div 
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className="fixed top-0 left-0 right-0 z-[100] p-4 lg:hidden"
+          >
+            <div className="glass p-6 rounded-3xl border border-gold/30 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
+              <div className="text-[10px] font-black text-gold uppercase mb-2 tracking-widest flex justify-between">
+                <span>{tutorialContent[tutorialStep-1].title}</span>
+                <span>{tutorialStep}/3</span>
+              </div>
+              <h4 className="serif text-white font-bold mb-1">{tutorialContent[tutorialStep-1].heading}</h4>
+              <p className="text-xs text-white/70 leading-relaxed mb-4">{tutorialContent[tutorialStep-1].text}</p>
+              <div className="flex justify-between items-center gap-4">
+                <button 
+                  onClick={() => setShowTooltips(false)}
+                  className="text-[10px] uppercase font-bold text-white/40"
+                >
+                  Skip Guide
+                </button>
+                <div className="flex gap-2">
+                  {tutorialStep > 1 && (
+                    <button 
+                      onClick={() => setTutorialStep(tutorialStep - 1)}
+                      className="btn-premium px-4 py-2 bg-white/5 border-white/10 text-[10px] rounded-xl"
+                    >
+                      Back
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => tutorialStep < 3 ? setTutorialStep(tutorialStep + 1) : setShowTooltips(false)}
+                    className="btn-premium px-6 py-2 bg-gold/20 text-gold border-gold/40 text-[10px] rounded-xl"
+                  >
+                    {tutorialStep < 3 ? "Next Step →" : "Finish"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* HEADER: Room Code & Public View */}
       <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10 gap-4">
@@ -417,19 +496,47 @@ export default function HostDashboard() {
             </button>
           )}
           <div className="relative">
-            <button 
-              onClick={() => window.open(`/display/${roomCode}`, '_blank')}
-              className={`btn-premium bg-gold/10 text-gold border-gold/40 px-6 py-4 rounded-full shadow-lg relative ${showTooltips ? 'animate-pulse-gold' : ''}`}
-            >
-              Open Public Display 📺
-            </button>
-            {showTooltips && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-48 glass p-4 rounded-2xl border border-gold/30 shadow-2xl z-20 animate-bounce-subtle pointer-events-none">
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#050505] border-t border-l border-gold/30 rotate-45" />
-                <p className="text-[10px] font-bold text-gold uppercase mb-1 tracking-widest">Step 1: Cast</p>
-                <p className="text-xs text-white/90 leading-snug">Open this on a TV or Projector for the room.</p>
-              </div>
-            )}
+            <Popover.Root open={showTooltips && !isMobile && tutorialStep === 1}>
+              <Popover.Trigger asChild>
+                <button 
+                  onClick={() => {
+                    window.open(`/display/${roomCode}`, '_blank');
+                    setTutorialStep(2);
+                  }}
+                  className={`btn-premium bg-gold/10 text-gold border-gold/40 px-6 py-4 rounded-full shadow-lg relative ${showTooltips && tutorialStep === 1 ? 'animate-pulse-gold' : ''}`}
+                >
+                  Open Public Display 📺
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content 
+                  side="right" 
+                  align="center" 
+                  sideOffset={12}
+                  className="z-50 outline-none"
+                >
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="w-64 glass p-6 rounded-2xl border border-gold/30 shadow-[0_0_40px_rgba(212,175,55,0.2)] animate-float"
+                  >
+                    <div className="text-[10px] font-black text-gold uppercase mb-1 tracking-widest flex justify-between">
+                      <span>Step 1: The Canvas</span>
+                      <span>1/3</span>
+                    </div>
+                    <h4 className="serif text-white font-bold mb-2">Cast the Court</h4>
+                    <p className="text-xs text-white/70 leading-relaxed mb-4">Open this on a TV or Projector so all poets can see the secret couplet and phase updates.</p>
+                    <button 
+                      onClick={() => setTutorialStep(2)}
+                      className="text-[10px] font-black uppercase text-gold hover:text-white transition-colors flex items-center gap-2"
+                    >
+                      Got it, Next Step →
+                    </button>
+                    <Popover.Arrow className="fill-gold/20" />
+                  </motion.div>
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
           </div>
           <div className="flex flex-col items-center gap-1">
             <button 
@@ -450,55 +557,95 @@ export default function HostDashboard() {
       </div>
       
       {/* 1. THE TELEPROMPTER */}
-      <section className="bg-gold text-crimson-black p-6 rounded-2xl shadow-xl border-4 border-gold/50 animate-bounce-subtle relative overflow-hidden">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="text-xs uppercase font-black tracking-widest opacity-70">Sultan's Teleprompter</h3>
-          <button 
-            onClick={() => setShowScript(!showScript)}
-            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all ${
-              showScript ? 'bg-background text-gold border-background' : 'bg-transparent text-background/40 border-background/20'
-            }`}
-          >
-            {showScript ? '📜 Script Active' : '📜 Show Script'}
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          <p className="text-2xl lg:text-3xl font-bold serif leading-tight">
-            {phase === 'lobby' && `Wait for at least ${gameState.min_players_required ?? 4} poets. Once gathered, click 'Assign Roles'.`}
-          {phase === 'reveal' && "Role Reveal: Tell everyone to look at their screens. One or more among them are Plagiarists. They must keep it secret!"}
-          {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s Blindfold Session. Tell everyone to close their eyes. Plagiarists, check your assignments. Silence for 60s!"}
-          {phase === 'mission' && gameState.mission_timer_end && "Mission in progress. Poets are solving. Elect a Speaker to state the final answer quietly to you."}
-          {phase === 'majlis' && (
-            gameState?.tie_protocol === 'revote' ? "The poets are divided. A Re-Vote is in progress. Only the tied candidates can be selected." :
-            gameState?.tie_protocol === 'spin' ? "The Pen of Fate will decide the Plagiarist." :
-            gameState?.tie_protocol === 'decree' ? "Sultan's Decree: You must hold the final power to banish a poet." :
-            "Majlis Open: Debate and cast votes to banish suspects. Lead the debate!"
-          )}
-          {phase === 'night' && (
-            silenceConfirmed 
-            ? "Poet silenced. Ready to announce the results to the room." 
-            : "Shhh! Tell everyone to close their eyes. Wait for the Plagiarists to vote on their phones. Once identified, click Confirm."
-          )}
-          {phase === 'end' && "The Mehfil is over. Reveal the identities and announce the winners!"}
-          </p>
-        </div>
+      <Popover.Root open={showTooltips && !isMobile && tutorialStep === 3}>
+        <Popover.Trigger asChild>
+          <section className="bg-gold text-crimson-black p-6 rounded-2xl shadow-xl border-4 border-gold/50 animate-bounce-subtle relative overflow-hidden">
+            <div className="flex justify-between items-start mb-2">
+              <h3 className="text-xs uppercase font-black tracking-widest opacity-70">Sultan's Teleprompter</h3>
+              <button 
+                onClick={() => setShowScript(!showScript)}
+                className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all ${
+                  showScript ? 'bg-background text-gold border-background' : 'bg-transparent text-background/40 border-background/20'
+                }`}
+              >
+                {showScript ? '📜 Script Active' : '📜 Show Script'}
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-2xl lg:text-3xl font-bold serif leading-tight">
+                {phase === 'lobby' && `Wait for at least ${gameState.min_players_required ?? 4} poets. Once gathered, click 'Assign Roles'.`}
+                {phase === 'reveal' && "Role Reveal: Tell everyone to look at their screens. One or more among them are Plagiarists. They must keep it secret!"}
+                {phase === 'mission' && !gameState.mission_timer_end && "Announce: 60s Blindfold Session. Tell everyone to close their eyes. Plagiarists, check your assignments. Silence for 60s!"}
+                {phase === 'mission' && gameState.mission_timer_end && "Mission in progress. Poets are solving. Elect a Speaker to state the final answer quietly to you."}
+                {phase === 'majlis' && (
+                  gameState?.tie_protocol === 'revote' ? "The poets are divided. A Re-Vote is in progress. Only the tied candidates can be selected." :
+                  gameState?.tie_protocol === 'spin' ? "The Pen of Fate will decide the Plagiarist." :
+                  gameState?.tie_protocol === 'decree' ? "Sultan's Decree: You must hold the final power to banish a poet." :
+                  "Majlis Open: Debate and cast votes to banish suspects. Lead the debate!"
+                )}
+                {phase === 'night' && (
+                  silenceConfirmed 
+                  ? "Poet silenced. Ready to announce the results to the room." 
+                  : "Shhh! Tell everyone to close their eyes. Wait for the Plagiarists to vote on their phones. Once identified, click Confirm."
+                )}
+                {phase === 'end' && "The Mehfil is over. Reveal the identities and announce the winners!"}
+              </p>
+            </div>
 
-        {showScript && (
-          <div className="animate-fade-in py-3 px-4 bg-background/5 border-t border-background/10 mt-4 rounded-xl">
-             <div className="text-[8px] uppercase font-black opacity-40 mb-1 tracking-widest">Narrator Script (Read Aloud)</div>
-             <p className="text-lg italic font-medium opacity-90">
-                {phase === 'lobby' && "Welcome to the Mehfil-e-Khaas! Today, poetry meets betrayal. Poets, gather your thoughts. Plagiarists, sharpen your knives."}
-                {phase === 'reveal' && "Look to your devices. Your destiny in this court is written. Keep your secret guarded with your life."}
-                {phase === 'mission' && !gameState.mission_timer_end && "The court falls dark. Poets, close your eyes. Plagiarists... reveal yourselves to one another."}
-                {phase === 'mission' && gameState.mission_timer_end && "The challenge is set. Solve the couplet before the sand runs out. Speaker, state your case."}
-                {phase === 'majlis' && "Let the Majlis begin! The scent of a Plagiarist is in the air. Debate, discuss... and decide who leaves the court."}
-                {phase === 'night' && "The night deepens. Everyone, eyes closed. Plagiarists... choose the voice you wish to silence."}
-                {phase === 'end' && gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The court has fallen. The Plagiarists rule the night."}
-             </p>
-          </div>
-        )}
-      </section>
+            {showScript && (
+              <div className="animate-fade-in py-3 px-4 bg-background/5 border-t border-background/10 mt-4 rounded-xl">
+                 <div className="text-[8px] uppercase font-black opacity-40 mb-1 tracking-widest">Narrator Script (Read Aloud)</div>
+                 <p className="text-lg italic font-medium opacity-90">
+                    {phase === 'lobby' && "Welcome to the Mehfil-e-Khaas! Today, poetry meets betrayal. Poets, gather your thoughts. Plagiarists, sharpen your knives."}
+                    {phase === 'reveal' && "Look to your devices. Your destiny in this court is written. Keep your secret guarded with your life."}
+                    {phase === 'mission' && !gameState.mission_timer_end && "The court falls dark. Poets, close your eyes. Plagiarists... reveal yourselves to one another."}
+                    {phase === 'mission' && gameState.mission_timer_end && "The challenge is set. Solve the couplet before the sand runs out. Speaker, state your case."}
+                    {phase === 'majlis' && "Let the Majlis begin! The scent of a Plagiarist is in the air. Debate, discuss... and decide who leaves the court."}
+                    {phase === 'night' && "The night deepens. Everyone, eyes closed. Plagiarists... choose the voice you wish to silence."}
+                    {phase === 'end' && gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The court has fallen. The Plagiarists rule the night."}
+                 </p>
+              </div>
+            )}
+          </section>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content 
+            side="top" 
+            align="center" 
+            sideOffset={12}
+            className="z-50 outline-none"
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-72 glass p-6 rounded-2xl border border-gold/30 shadow-[0_0_40px_rgba(212,175,55,0.2)] font-sans"
+            >
+              <div className="text-[10px] font-black text-gold uppercase mb-1 tracking-widest flex justify-between">
+                <span>Step 3: The Decree</span>
+                <span>3/3</span>
+              </div>
+              <h4 className="serif text-white font-bold mb-2">The Sultan's Power</h4>
+              <p className="text-xs text-white/70 leading-relaxed mb-4">Once poets have gathered, click <strong>Assign Roles & Start</strong> in the panel below to begin the Mehfil.</p>
+              <div className="flex justify-between items-center">
+                <button 
+                  onClick={() => setTutorialStep(2)}
+                  className="text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors"
+                >
+                  ← Back
+                </button>
+                <button 
+                  onClick={() => setShowTooltips(false)}
+                  className="text-[10px] font-black uppercase text-gold hover:text-white transition-colors"
+                >
+                  Finish
+                </button>
+              </div>
+              <Popover.Arrow className="fill-gold/20" />
+            </motion.div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
 
       {/* HOST TOOLKIT DRAWER */}
       <div className={`fixed inset-y-0 right-0 w-80 bg-[#f4e4bc] text-[#2c1810] shadow-2xl z-50 transform transition-transform duration-500 ease-in-out border-l-8 border-[#d4af37]/30 ${isToolkitOpen ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -576,12 +723,12 @@ export default function HostDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-emerald-900/20 border border-emerald-500/30 p-6 rounded-3xl">
                 <h4 className="text-xs uppercase font-black text-emerald-500 mb-2 tracking-widest">Public: Read Aloud</h4>
-                <h3 className="text-2xl font-bold serif mb-2 text-white">{activeMission.title}</h3>
-                <p className="text-emerald-100/70 italic">"{activeMission.public_goal}"</p>
+                <h3 className="text-2xl font-bold serif mb-2 text-white">{activeMission?.title ?? "Untitled Mission"}</h3>
+                <p className="text-emerald-100/70 italic">"{activeMission?.public_goal ?? ""}"</p>
               </div>
               <div className="bg-red-900/20 border border-red-500/30 p-6 rounded-3xl">
                 <h4 className="text-xs uppercase font-black text-red-500 mb-2 tracking-widest">Classified: Classified</h4>
-                <p className="text-xl font-bold text-red-500 serif italic">"{activeMission.secret_sabotage}"</p>
+                <p className="text-xl font-bold text-red-500 serif italic">"{activeMission?.secret_sabotage ?? ""}"</p>
               </div>
               
               {/* THE SOURCE OF TRUTH CARD */}
@@ -589,12 +736,12 @@ export default function HostDashboard() {
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-150 transition-transform duration-1000">👑</div>
                   <h4 className="text-xs uppercase font-black text-emerald-500 mb-4 tracking-[0.3em]">The Source of Truth: Answer Key</h4>
                   <p className="text-3xl lg:text-4xl font-black text-white serif italic leading-tight">
-                      {activeMission.host_answer_key || "No answer key provided for this mission."}
+                      {activeMission?.host_answer_key || "No answer key provided for this mission."}
                   </p>
               </div>
 
               {/* START MISSION BUTTON (Only if timer not started) */}
-              {!gameState.mission_timer_end && (
+              {!gameState?.mission_timer_end && (
                 <div className="md:col-span-2 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <button 
                         onClick={handleStartMission}
@@ -613,15 +760,48 @@ export default function HostDashboard() {
 
           <section className="glass p-6 rounded-3xl border border-white/10 h-full">
             <div className="flex justify-between items-center mb-6 relative">
-                <h2 className="text-xl font-bold serif text-gold">Gathered Poets ({players.length}/{gameState.min_players_required ?? 8})</h2>
-                {showTooltips && (
-                  <div className="absolute top-full left-0 mt-2 w-56 glass p-4 rounded-2xl border border-gold/30 shadow-2xl z-20 animate-bounce-subtle pointer-events-none">
-                    <div className="absolute -top-2 left-8 w-4 h-4 bg-[#050505] border-t border-l border-gold/30 rotate-45" />
-                    <p className="text-[10px] font-bold text-gold uppercase mb-1 tracking-widest">Step 2: Gathering</p>
-                    <p className="text-xs text-white/90 leading-snug">Share the link. Wait for {gameState.min_players_required ?? 8} poets to join.</p>
-                  </div>
-                )}
-                <div className="text-sm font-mono text-gold/60">POT: ₹{gameState.eidi_pot}</div>
+              <Popover.Root open={showTooltips && !isMobile && tutorialStep === 2}>
+                <Popover.Trigger asChild>
+                  <h2 className="text-xl font-bold serif text-gold cursor-help">Gathered Poets ({players.length}/{gameState.min_players_required ?? 8})</h2>
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content 
+                    side="left" 
+                    align="center" 
+                    sideOffset={12}
+                    className="z-50 outline-none"
+                  >
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="w-72 glass p-6 rounded-2xl border border-gold/30 shadow-2xl"
+                    >
+                      <div className="text-[10px] font-black text-gold uppercase mb-1 tracking-widest flex justify-between">
+                        <span>Step 2: The Gathering</span>
+                        <span>2/3</span>
+                      </div>
+                      <h4 className="serif text-white font-bold mb-2">Assemble the Court</h4>
+                      <p className="text-xs text-white/70 leading-relaxed mb-4">Share the link above. Once we reach <strong>{gameState.min_players_required ?? 8} poets</strong>, the Sultan can start the session.</p>
+                      <div className="flex justify-between items-center">
+                        <button 
+                          onClick={() => setTutorialStep(1)}
+                          className="text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors"
+                        >
+                          ← Back
+                        </button>
+                        <button 
+                          onClick={() => setTutorialStep(3)}
+                          className="text-[10px] font-black uppercase text-gold hover:text-white transition-colors"
+                        >
+                          Next Step →
+                        </button>
+                      </div>
+                      <Popover.Arrow className="fill-gold/20" />
+                    </motion.div>
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+              <div className="text-sm font-mono text-gold/60">POT: ₹{gameState.eidi_pot}</div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -741,17 +921,10 @@ export default function HostDashboard() {
                     <button 
                       onClick={handleAssignRoles}
                       disabled={players.length < (gameState?.min_players_required ?? (gameState?.is_dev_mode ? 1 : 4))}
-                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${showTooltips && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
+                      className={`btn-premium w-full bg-emerald-600 py-6 rounded-2xl shadow-2xl border-emerald-500/50 text-lg active:scale-95 transition-all ${showTooltips && tutorialStep === 3 && players.length >= (gameState?.min_players_required ?? 4) ? 'animate-pulse-gold' : ''}`}
                     >
                       Assign Roles & Start
                     </button>
-                    {showTooltips && (
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-56 glass p-4 rounded-2xl border border-gold/30 shadow-2xl z-20 animate-bounce-subtle pointer-events-none">
-                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#050505] border-b border-r border-gold/30 rotate-45" />
-                        <p className="text-[10px] font-bold text-gold uppercase mb-1 tracking-widest">Step 3: Start</p>
-                        <p className="text-xs text-white/90 leading-snug">Click once everyone is in. This starts the game!</p>
-                      </div>
-                    )}
                   </div>
                   {players.length < (gameState?.min_players_required ?? 4) && !gameState?.is_dev_mode && (
                     <p className="text-center text-red-500 text-[10px] uppercase font-black tracking-widest mt-4 animate-pulse">Minimum {gameState?.min_players_required ?? 4} players required to start the Mehfil.</p>
