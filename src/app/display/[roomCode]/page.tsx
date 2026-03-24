@@ -274,7 +274,7 @@ export default function PublicDisplay() {
             <div className="space-y-12 animate-scale-up w-full max-w-6xl">
                 <div className="text-[12rem] mb-1 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
                 <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
-                  {gameState.winner_faction === 'poets' ? 'The Poetic Order Restored' : 'The Plagiarists Rule the City'}
+                  {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
                 </h2>
 
                 {gameState.winner_faction === 'poets' && (

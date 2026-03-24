@@ -20,6 +20,7 @@ export default function HostDashboard() {
   const { players, loading: playersLoading } = usePlayers(roomId || '');
   
   const [votes, setVotes] = useState<any[]>([]);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [nightVotes, setNightVotes] = useState<any[]>([]);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [missionOutcome, setMissionOutcome] = useState<'success' | 'failed' | null>(null);
@@ -137,8 +138,10 @@ export default function HostDashboard() {
   }, [votes]);
 
   const maxVotes = Math.max(...Object.values(voteTallies), 0);
-  const mostVotedPlayers = alivePlayers.filter(p => (voteTallies[p.id] || 0) === maxVotes && maxVotes > 0);
-  const isTie = isVotesLocked && mostVotedPlayers.length > 1 && (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol);
+  const mostVotedPlayers = (alivePlayers.length === 2 && maxVotes === 0) ? alivePlayers : alivePlayers.filter(p => (voteTallies[p.id] || 0) === maxVotes && maxVotes > 0);
+  const isTie = alivePlayers.length === 2 
+    ? (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol)
+    : isVotesLocked && mostVotedPlayers.length > 1 && (gameState?.tie_protocol === 'none' || !gameState?.tie_protocol);
 
   const nightVoteTallies = useMemo(() => {
     const tallies: Record<string, number> = {};
@@ -161,7 +164,11 @@ export default function HostDashboard() {
     if (plagiaristsCount >= poetsCount) return 'plagiarists';
     return null;
   }, [players, playersLoading, phase]);
-
+  
+  const missionSignalCount = useMemo(() => votes.filter(v => v.round_id === 0).length, [votes]);
+  const canVerifySabotage = useMemo(() => {
+    return (missionSignalCount === alivePlagiarists.length || (timeLeft === 0 && phase === 'mission')) && missionSignalCount > 0 && !gameState?.sabotage_used && !isVerifying;
+  }, [missionSignalCount, alivePlagiarists.length, timeLeft, gameState?.sabotage_used, phase, isVerifying]);
   const hasPlayedRef = useRef(false);
 
   useEffect(() => {
@@ -433,23 +440,39 @@ export default function HostDashboard() {
     // 3. Transition to mission after delay (handled by Host clicking button again or auto)
     // For now, let's keep it manual so Host can control the cinematic length.
   };
-
   const handleVerifySabotage = async () => {
-    if (missionOutcome || !gameState) return; // Already concluded
+    if (missionOutcome || !gameState || isVerifying || gameState.sabotage_used) return; 
     
-    // Optimistic Update
-    setGameState(prev => prev ? { ...prev, sabotage_triggered: false } : null);
+    setIsVerifying(true);
+
+    // Fresh fetch to prevent race conditions
+    const { data: latestRoom } = await supabase.from('game_rooms').select('sabotage_used').eq('id', roomId).single();
+    if (latestRoom?.sabotage_used) {
+        setIsVerifying(false);
+        return;
+    }
+
+    // 1. Lock immediately at DB level
+    await supabase.from('game_rooms').update({ 
+        sabotage_used: true,
+        sabotage_triggered: false 
+    }).eq('id', roomId);
     
-    // Award gold to plagiarists and update pot
+    // 2. Award gold to plagiarists
     const plagiarists = players.filter(p => p.role === 'naqal_baaz' && p.status === 'alive');
     for (const p of plagiarists) {
       await supabase.from('players').update({ private_gold: (p.private_gold || 0) + 500 }).eq('id', p.id);
     }
+    
+    // 3. Update pot
     await supabase.from('game_rooms').update({ 
-        eidi_pot: (gameState.eidi_pot || 0) + 1000, 
-        sabotage_triggered: false,
-        sabotage_used: true
+        eidi_pot: (gameState.eidi_pot || 0) + 1000
     }).eq('id', roomId);
+
+    // 4. Clear mission signals (round_id 0)
+    await supabase.from('votes').delete().eq('room_id', roomId).eq('round_id', 0);
+    
+    setIsVerifying(false); // Reset guard after all operations complete
   };
 
   const handleMissionSuccess = async () => {
@@ -652,7 +675,7 @@ export default function HostDashboard() {
                     {phase === 'mission' && gameState.mission_timer_end && "The challenge is set. Solve the couplet before the sand runs out. Speaker, state your case."}
                     {phase === 'majlis' && "Let the Majlis begin! The scent of a Plagiarist is in the air. Debate, discuss... and decide who leaves the court."}
                     {phase === 'night' && "The night deepens. Everyone, eyes closed. Plagiarists... choose the voice you wish to silence."}
-                    {phase === 'end' ? (gameState.winner_faction === 'poets' ? "Justice is served! The poets have reclaimed the court." : "The Plagiarists have seized control. The court is lost.") 
+                    {phase === 'end' ? (gameState.winner_faction === 'poets' ? "Justice is served! The Sukhan-war (Poets) prevail!" : "The Naqal-baaz (Plagiarists) rule the City!") 
                      : (phase === 'night' ? "The court has fallen. The Plagiarists rule the night." : "The Sultan's word is law. Listen closely to the decree.") }
                  </p>
               </div>
@@ -1018,10 +1041,10 @@ export default function HostDashboard() {
                     
                     <button 
                       onClick={handleVerifySabotage}
-                      disabled={!gameState.sabotage_triggered || gameState.sabotage_used || !!missionOutcome}
+                      disabled={!canVerifySabotage}
                       className="btn-premium w-full bg-red-600/20 text-red-500 border-red-600/40 py-4 rounded-2xl disabled:opacity-20"
                     >
-                      {gameState.sabotage_used ? "Sabotage Verified" : `Verify Sabotage ${gameState.sabotage_triggered ? "(Alert!)" : ""}`}
+                      {gameState?.sabotage_used ? "Sabotage Verified" : `Verify Sabotage (${missionSignalCount}/${alivePlagiarists.length})`}
                     </button>
 
                     <button 
@@ -1036,13 +1059,15 @@ export default function HostDashboard() {
 
               {phase === 'majlis' && (
                 <div className="space-y-4">
-                    <button 
-                        onClick={() => setIsVotesLocked(true)}
-                        disabled={votes.length < alivePlayers.length || isVotesLocked}
-                        className="btn-premium w-full bg-gold/20 text-gold border-gold/40 py-5 rounded-2xl"
-                    >
-                        {isVotesLocked ? "Votes Locked" : "Lock Votes & Reveal"}
-                    </button>
+                    {alivePlayers.length > 2 && (
+                        <button 
+                            onClick={() => setIsVotesLocked(true)}
+                            disabled={votes.length < alivePlayers.length || isVotesLocked}
+                            className="btn-premium w-full bg-gold/20 text-gold border-gold/40 py-5 rounded-2xl"
+                        >
+                            {isVotesLocked ? "Votes Locked" : "Lock Votes & Reveal"}
+                        </button>
+                    )}
                     
                     {isVotesLocked && !isTie && gameState?.tie_protocol === 'none' && !isBanishmentConfirmed && (
                         <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
@@ -1070,7 +1095,9 @@ export default function HostDashboard() {
                             </div>
                             <div className="grid grid-cols-1 gap-3">
                                 <button onClick={() => handleTieProtocolSelect('decree')} className="btn-premium w-full bg-gold text-black py-4 rounded-xl font-bold">🔱 Sultan's Decree</button>
-                                <button onClick={() => handleTieProtocolSelect('revote')} className="btn-premium w-full bg-white/10 text-gold border-gold/40 py-4 rounded-xl font-bold">🗳️ The Re-Vote</button>
+                                {alivePlayers.length > 2 && (
+                                    <button onClick={() => handleTieProtocolSelect('revote')} className="btn-premium w-full bg-white/10 text-gold border-gold/40 py-4 rounded-xl font-bold">🗳️ The Re-Vote</button>
+                                )}
                                 <button onClick={() => handleTieProtocolSelect('spin')} className="btn-premium w-full bg-red-950/40 text-red-500 border-red-900/50 py-4 rounded-xl font-bold">✒️ Spin the Pen</button>
                             </div>
                         </div>
@@ -1162,7 +1189,7 @@ export default function HostDashboard() {
               {phase === 'night' && (
                 <div className="space-y-4">
                     <div className="bg-black/40 p-6 rounded-2xl border border-white/10">
-                        <h3 className="text-xs uppercase font-bold text-gray-500 mb-4 tracking-widest text-center">Plagiarist Coordination</h3>
+                        <h3 className="text-xs uppercase font-bold text-gray-500 mb-4 tracking-widest text-center">{alivePlagiarists.length > 1 ? "Plagiarist Coordination" : "Plagiarist Selection"}</h3>
                         <div className="space-y-3">
                             {alivePoets.map(p => {
                                 const count = nightVoteTallies[p.id] || 0;
@@ -1233,7 +1260,7 @@ export default function HostDashboard() {
                 <div className="space-y-4">
                     <div className="p-8 bg-gold/20 rounded-3xl border-4 border-gold/40 text-center mb-6 shadow-2xl">
                         <h2 className="text-9xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
-                  {gameState.winner_faction === 'poets' ? 'The Poetic Order Restored' : 'The Plagiarists Rule the City'}
+                  {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
                 </h2>
                         <p className="text-gold/60 uppercase text-[10px] font-black tracking-widest border-t border-gold/20 pt-4">Final Eidi Pot: ₹{gameState.eidi_pot}</p>
                     </div>

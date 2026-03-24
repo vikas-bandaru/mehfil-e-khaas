@@ -41,6 +41,8 @@ export default function PlayerClient() {
   const [votedId, setVotedId] = useState<string | null>(null);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [nightVotes, setNightVotes] = useState<any[]>([]);
+  const [votes, setVotes] = useState<any[]>([]);
+  const [isSignaling, setIsSignaling] = useState(false);
 
   useEffect(() => {
     setPlayerId(localStorage.getItem('playerId'));
@@ -123,7 +125,25 @@ export default function PlayerClient() {
   const me = players.find(p => p.id === playerId);
   const isTraitor = me?.role === 'naqal_baaz';
 
-  // Realtime subscription for coordination
+  // Realtime subscription for coordination & sabotage signals
+  useEffect(() => {
+    if ((gameState?.current_phase === 'night' || gameState?.current_phase === 'mission' || gameState?.current_phase === 'majlis') && roomId) {
+        const fetchVotes = async () => {
+            const { data } = await supabase.from('votes').select('*').eq('room_id', roomId);
+            if (data) setVotes(data);
+        };
+        fetchVotes();
+
+        const channel = supabase.channel('votes-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'votes', filter: `room_id=eq.${roomId}` }, () => {
+                fetchVotes();
+            })
+            .subscribe();
+        
+        return () => { supabase.removeChannel(channel); };
+    }
+  }, [gameState?.current_phase, roomId]);
+
   useEffect(() => {
     if (gameState?.current_phase === 'night' && isTraitor && roomId) {
         const fetchNightVotes = async () => {
@@ -180,15 +200,24 @@ export default function PlayerClient() {
   };
 
   const handleSabotageTrigger = async () => {
-    if (!roomId || gameState?.sabotage_triggered) return;
+    if (!roomId || !playerId || gameState?.sabotage_used || isSignaling) return;
     
-    // Optimistic UI for the Plagiarist
-    setGameState(prev => prev ? { ...prev, sabotage_triggered: true } : null);
-    
-    const { error } = await supabase.from('game_rooms').update({ sabotage_triggered: true }).eq('id', roomId);
+    // Check if I already signaled
+    const alreadySignaled = votes.some(v => v.voter_id === playerId && v.round_id === 0);
+    if (alreadySignaled) return;
+
+    setIsSignaling(true);
+    // Use votes table with round_id: 0 for mission sabotage signals
+    const { error } = await supabase.from('votes').insert([{
+        room_id: roomId,
+        voter_id: playerId,
+        target_id: playerId, // Valid player ID as target
+        round_id: 0
+    }]);
+
     if (error) {
-        console.error("Sabotage Failed:", error);
-        setGameState(prev => prev ? { ...prev, sabotage_triggered: false } : null);
+        console.error("Sabotage Signal Failed:", error.message, error.code, error.details);
+        setIsSignaling(false);
     }
   };
 
@@ -355,6 +384,9 @@ export default function PlayerClient() {
         </main>
       );
     }
+    const mySabotageSignal = votes.find(v => v.voter_id === playerId && v.round_id === 0);
+    const signalCount = votes.filter(v => v.round_id === 0).length;
+    const alivePlagiarists = players.filter(p => p.role === 'naqal_baaz' && p.status === 'alive').length;
 
     return (
       <main className="min-h-screen bg-slate-900 text-white p-6 flex flex-col justify-between overflow-hidden">
@@ -398,19 +430,19 @@ export default function PlayerClient() {
                     
                     <button 
                         onClick={handleSabotageTrigger}
-                        disabled={gameState.sabotage_triggered || gameState.sabotage_used || isBlindfoldPhase || !gameState.mission_timer_end}
+                        disabled={!!mySabotageSignal || gameState.sabotage_used || isBlindfoldPhase || !gameState.mission_timer_end}
                         className={`btn-premium w-full py-6 rounded-2xl font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(220,38,38,0.3)] transition-all font-mono min-h-[44px] ${
-                            gameState.sabotage_triggered 
+                            mySabotageSignal 
                             ? 'bg-red-900/40 text-red-500/50 border-red-900/20' 
                             : 'bg-red-600 text-white border-red-400 active:scale-95'
                         }`}
                     >
-                        {gameState.sabotage_triggered ? "⚡ Sabotage Active" : (isBlindfoldPhase ? "Eyes Closed..." : (gameState.sabotage_used ? "Sabotage Used" : (!gameState.mission_timer_end ? "Mission Concluded" : "Signal Sabotage")))}
+                        {mySabotageSignal ? `⚡ Signal Sent (${signalCount}/${alivePlagiarists})` : (isBlindfoldPhase ? "Eyes Closed..." : (gameState.sabotage_used ? "Sabotage Verified" : (!gameState.mission_timer_end ? "Mission Concluded" : "Signal Sabotage")))}
                     </button>
                     {gameState.sabotage_used && (
                         <div className="mt-4 p-4 bg-red-950/20 border border-red-500/30 rounded-2xl flex justify-between items-center animate-fade-enter-active">
-                            <span className="text-red-500 font-black uppercase text-[10px] tracking-[0.2em]">Sabotage Bounty</span>
-                            <span className="text-white font-black text-xl">₹500</span>
+                             <span className="text-red-500 font-black uppercase text-[10px] tracking-[0.2em]">Sabotage Bounty</span>
+                             <span className="text-white font-black text-xl">₹500</span>
                         </div>
                     )}
                     {isBlindfoldPhase && (
