@@ -270,19 +270,14 @@ export default function HostDashboard() {
                 reveal_target_id: null 
             }).eq('id', roomId);
         }
-
-        // Optimistic UI Update
+                // Optimistic UI Update
         console.log("Optimistic Transition to:", nextPhase);
         if (nextPhase === 'mission') {
             const timerEnd = new Date();
-            timerEnd.setSeconds(timerEnd.getSeconds() + 150);
-            setGameState(prev => prev ? { 
-                ...prev, 
-                current_phase: nextPhase,
-                mission_timer_end: timerEnd.toISOString()
-            } : null);
+            timerEnd.setSeconds(timerEnd.getSeconds() + 90);
+            setGameState(prev => prev ? { ...prev, current_phase: nextPhase, mission_timer_end: timerEnd.toISOString() } : null);
         } else {
-            setGameState(prev => prev ? { ...prev, current_phase: nextPhase, mission_timer_end: null } : null);
+            setGameState(prev => prev ? { ...prev, current_phase: nextPhase } : null);
         }
 
         await advancePhase(roomId, nextPhase);
@@ -432,14 +427,26 @@ export default function HostDashboard() {
 
   const [isSpinning, setIsSpinning] = useState(false);
   const handleSpinThePen = async () => {
+    if (!roomId) return;
     setIsSpinning(true);
-    // Simulation for Host view, real sync via Supabase
-    setTimeout(async () => {
-        const tiedIds = gameState?.tied_player_ids || [];
-        const winnerId = tiedIds[Math.floor(Math.random() * tiedIds.length)];
-        await handleBanish(winnerId);
+    
+    const tiedIds = gameState?.tied_player_ids || [];
+    if (tiedIds.length === 0) {
         setIsSpinning(false);
-    }, 3000);
+        return;
+    }
+
+    // 1. Determine winner and sync to Display Page immediately
+    const winnerId = tiedIds[Math.floor(Math.random() * tiedIds.length)];
+    await supabase.from('game_rooms').update({ reveal_target_id: winnerId }).eq('id', roomId);
+    
+    // 2. Wait 15 seconds (5s spin + 10s showing the result)
+    setTimeout(async () => {
+        await handleBanish(winnerId);
+        // Clear reveal target so next round is fresh
+        await supabase.from('game_rooms').update({ reveal_target_id: null }).eq('id', roomId);
+        setIsSpinning(false);
+    }, 15000);
   };
 
   const handleSilence = async (targetId: string) => {
@@ -494,24 +501,21 @@ export default function HostDashboard() {
     }
 
     // 1. Update Game Room State (Consolidated)
+    // We set sabotage_triggered to true to signal the finalize logic to apply the tax
     const { error: roomError } = await supabase.from('game_rooms').update({ 
         sabotage_used: true,
-        sabotage_triggered: false,
-        eidi_pot: (latestRoom?.eidi_pot || 0) + 1000
+        sabotage_triggered: true 
     }).eq('id', roomId);
     
     if (roomError) {
         console.error("Sabotage Room Update Failed Detail:", JSON.stringify(roomError, null, 2));
-        alert(`Failed to update pot: ${roomError.message}`);
+        alert(`Failed to update sabotage status: ${roomError.message}`);
         setIsVerifying(false);
         return;
     }
     
-    // 2. Award gold to plagiarists
-    const plagiarists = players.filter(p => p.role === 'naqal_baaz' && p.status === 'alive');
-    for (const p of plagiarists) {
-      await supabase.from('players').update({ private_gold: (p.private_gold || 0) + 500 }).eq('id', p.id);
-    }
+    // 2. Clear mission signals (round_id 0) is deferred until missionFinalized 
+    // to ensure we can still identify signalers in final payout handlers
     
     // 3. Clear mission signals (round_id 0)
     await supabase.from('votes').delete().eq('room_id', roomId).eq('round_id', 0);
@@ -522,17 +526,84 @@ export default function HostDashboard() {
   };
 
   const handleMissionSuccess = async () => {
-    if (missionOutcome) return;
+    if (missionOutcome || !roomId) return;
     
-    await supabase.from('game_rooms').update({ 
-        eidi_pot: (gameState!.eidi_pot || 0) + 2000,
-        mission_timer_end: null 
-    }).eq('id', roomId);
-    setMissionOutcome('success');
+    try {
+        const hasSabotage = gameState?.sabotage_triggered || false;
+        const addAmount = hasSabotage ? 1000 : 2000;
+        
+        // 1. Update the Pot
+        await supabase.from('game_rooms').update({ 
+            eidi_pot: (gameState!.eidi_pot || 0) + addAmount,
+            mission_timer_end: null 
+        }).eq('id', roomId);
+
+        // 2. If Sabotaged, award signaling plagiarists
+        if (hasSabotage) {
+            const signalingIds = votes.filter(v => v.round_id === 0).map(v => v.voter_id);
+            if (signalingIds.length > 0) {
+                // Fetch current golds for these specific players
+                const { data: playersToAward } = await supabase
+                    .from('players')
+                    .select('id, private_gold')
+                    .in('id', signalingIds);
+                
+                for (const p of playersToAward || []) {
+                    await supabase.from('players').update({ 
+                        private_gold: (p.private_gold || 0) + 1000 
+                    }).eq('id', p.id);
+                }
+            }
+        }
+
+        setMissionOutcome('success');
+    } catch (err) {
+        console.error("Success update failed:", err);
+        alert("Failed to update mission outcome.");
+    }
+  };
+
+  const handleMissionFailure = async () => {
+    if (missionOutcome || !roomId) return;
+    
+    try {
+        const hasSabotage = gameState?.sabotage_triggered || false;
+        
+        // 1. Stop timer
+        await supabase.from('game_rooms').update({ 
+            mission_timer_end: null 
+        }).eq('id', roomId);
+
+        // 2. If Sabotaged, award signaling plagiarists (even on failure!)
+        if (hasSabotage) {
+            const signalingIds = votes.filter(v => v.round_id === 0).map(v => v.voter_id);
+            if (signalingIds.length > 0) {
+                const { data: playersToAward } = await supabase
+                    .from('players')
+                    .select('id, private_gold')
+                    .in('id', signalingIds);
+                
+                for (const p of playersToAward || []) {
+                    await supabase.from('players').update({ 
+                        private_gold: (p.private_gold || 0) + 1000 
+                    }).eq('id', p.id);
+                }
+            }
+        }
+
+        setMissionOutcome('failed');
+    } catch (err) {
+        console.error("Failure update failed:", err);
+        alert("Failed to update mission outcome.");
+    }
   };
 
   const handleStartMission = async () => {
     if (!roomId) return;
+    // Reset local verification and outcome states for the new mission
+    setIsSabotageVerified(false);
+    setIsVerifying(false);
+    setMissionOutcome(null);
     await startMission(roomId);
   };
 
@@ -1113,11 +1184,11 @@ export default function HostDashboard() {
                         disabled={timeLeft > 90 || !!missionOutcome}
                         className="btn-premium w-full bg-emerald-900/50 text-emerald-400 border-emerald-500/30 py-5 rounded-2xl disabled:opacity-20"
                     >
-                        Success: Answer Matches (+₹2000)
+                        Success: Answer Matches ({gameState?.sabotage_triggered ? '+₹1000 Taxed' : '+₹2000'})
                     </button>
                     
                     <button 
-                        onClick={() => setMissionOutcome('failed')} 
+                        onClick={handleMissionFailure} 
                         disabled={timeLeft > 0 || !!missionOutcome}
                         className="btn-premium w-full bg-red-900/50 text-red-400 border-red-500/30 py-5 rounded-2xl disabled:opacity-20"
                     >

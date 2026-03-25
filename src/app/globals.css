@@ -142,3 +142,11 @@ h1, h2, h3, .serif {
 .animate-bounce-slow {
   animation: bounce-slow 3s ease-in-out infinite;
 }
+
+@keyframes spin-to-stop {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(var(--target-rotation)); }
+}
+.animate-spin-to-stop {
+  animation: spin-to-stop 8s cubic-bezier(0.15, 0, 0.15, 1) forwards;
+}

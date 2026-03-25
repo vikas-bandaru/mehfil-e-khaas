@@ -58,6 +58,8 @@ export default function PlayerClient() {
         if (data) setActiveMission(data);
       };
       fetchMission();
+      // Reset local sabotage signaling state when a new mission starts
+      setIsSignaling(false);
     } else {
       setActiveMission(null);
     }
@@ -428,7 +430,7 @@ export default function PlayerClient() {
                     {gameState.sabotage_used && (
                         <div className="mt-4 p-4 bg-red-950/20 border border-red-500/30 rounded-2xl flex justify-between items-center animate-fade-enter-active">
                              <span className="text-red-500 font-black uppercase text-[10px] tracking-[0.2em]">Sabotage Bounty</span>
-                             <span className="text-white font-black text-xl">₹500</span>
+                             <span className="text-white font-black text-xl">₹1000</span>
                         </div>
                     )}
                     {isBlindfoldPhase && (

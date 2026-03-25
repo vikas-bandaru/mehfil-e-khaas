@@ -104,7 +104,7 @@ export default function PublicDisplay() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center text-center p-10 relative">
+      <div className="flex-1 flex flex-col items-center justify-center text-center p-4 lg:p-10 relative">
         
         {phase === 'lobby' && (
             <div className="space-y-8 animate-fade-enter-active">
@@ -216,33 +216,76 @@ export default function PublicDisplay() {
                     </div>
                 ) : gameState.tie_protocol === 'spin' ? (
                     <div className="space-y-12 animate-fade-enter-active py-10 flex flex-col items-center">
-                         <h2 className="text-6xl lg:text-8xl font-black italic serif text-red-500 uppercase tracking-tighter">The Pen of Fate</h2>
+                         <h2 className="text-6xl lg:text-8xl font-black italic serif text-red-500 uppercase tracking-tighter drop-shadow-glow">The Pen of Fate</h2>
                          
-                         <div className="relative w-[600px] h-[600px] flex items-center justify-center">
+                         <div className="relative w-[700px] h-[700px] flex items-center justify-center">
+                            {/* Player Cards in Circle */}
                             {gameState.tied_player_ids?.map((id, i) => {
                                 const p = players.find(p => p.id === id);
-                                const angle = (i * 360) / (gameState.tied_player_ids?.length || 1);
+                                const tiedCount = gameState.tied_player_ids?.length || 1;
+                                const angle = (i * 360) / tiedCount;
+                                const isWinner = gameState.reveal_target_id === id;
+                                
                                 return (
                                     <div 
                                         key={id} 
-                                        className="absolute transform -translate-x-1/2 -translate-y-1/2 glass p-8 rounded-2xl border-2 border-white/10 min-w-[180px]"
+                                        className={`absolute transform -translate-x-1/2 -translate-y-1/2 glass p-10 rounded-[2.5rem] border-4 transition-all duration-1000 min-w-[220px] text-center ${
+                                            isWinner ? 'border-gold scale-125 shadow-[0_0_100px_rgba(255,215,0,0.4)] z-50 bg-gold/10' : 'border-white/10 opacity-30 scale-90 grayscale'
+                                        }`}
                                         style={{ 
-                                            left: `${50 + 40 * Math.cos((angle * Math.PI) / 180)}%`,
-                                            top: `${50 + 40 * Math.sin((angle * Math.PI) / 180)}%`
+                                            left: `${50 + 44 * Math.cos((angle * Math.PI) / 180)}%`,
+                                            top: `${50 + 44 * Math.sin((angle * Math.PI) / 180)}%`
                                         }}
                                     >
-                                        <div className="text-2xl font-black serif italic text-white">{p?.name}</div>
+                                        <div className={`text-4xl font-black serif italic tracking-tight ${isWinner ? 'text-gold' : 'text-white'}`}>{p?.name}</div>
+                                        {isWinner && <div className="text-[12px] text-gold font-black uppercase tracking-[0.3em] mt-3 animate-bounce-slow">The Seal is Set</div>}
                                     </div>
                                 );
                             })}
 
-                            <div className="w-64 h-64 relative animate-spin-slow duration-[3000ms]">
-                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-48 bg-gradient-to-b from-red-600 via-gold to-transparent rounded-full shadow-[0_0_30px_rgba(255,0,0,0.5)]">
-                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl">✒️</div>
-                                </div>
-                            </div>
+                             {/* THE PEN OF FATE */}
+                             {(() => {
+                                 const tiedIds = gameState?.tied_player_ids || [];
+                                 const winnerIndex = (gameState?.reveal_target_id && tiedIds.length > 0) ? tiedIds.indexOf(gameState.reveal_target_id) : -1;
+                                 const hasWinner = winnerIndex !== -1;
+                                 
+                                 // 0 degrees is Right (3 o'clock)
+                                 // The Pen tip is at Top (12 o'clock) relative to its center pivot
+                                 // To point at 0 degrees, we need rotate(90deg)
+                                 const baseRotation = 90;
+                                 const targetAngle = hasWinner ? (winnerIndex * 360 / tiedIds.length) : 0;
+                                 const rotations = 360 * 12; // 12 full cycles for drama
+                                 const finalRotation = hasWinner ? (rotations + targetAngle + baseRotation) : 0;
+
+                                 return (
+                                     <div 
+                                         key={hasWinner ? `winner-${gameState.reveal_target_id}` : 'spinning'}
+                                         className={`w-96 h-96 relative flex items-center justify-center transition-all ${hasWinner ? 'animate-spin-to-stop' : 'animate-spin-slow'}`}
+                                         style={{ 
+                                             '--target-rotation': `${finalRotation}deg`,
+                                             transformOrigin: 'center center'
+                                         } as any}
+                                     >
+                                         {/* Outer Ring Decoration */}
+                                         <div className="absolute inset-0 rounded-full border border-white/5 animate-pulse" />
+                                         
+                                         {/* Pen Handle & Body */}
+                                         <div className="absolute top-0 bottom-1/2 left-1/2 -translate-x-1/2 w-8 bg-gradient-to-b from-red-600 via-gold to-red-900 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center">
+                                             {/* The Nib / Tip - Specifically aligned to point precisely */}
+                                             <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-7xl select-none filter drop-shadow-[0_0_15px_rgba(255,215,0,0.7)]">
+                                                 ✒️
+                                             </div>
+                                         </div>
+                                         
+                                         {/* Center Pivot Point */}
+                                         <div className="w-12 h-12 rounded-full bg-gold border-[6px] border-red-950 z-20 shadow-[0_0_30px_rgba(255,215,0,0.3)]" />
+                                     </div>
+                                 );
+                             })()}
                          </div>
-                         <p className="text-white/40 text-2xl uppercase tracking-[0.5em] font-black animate-pulse">Fate is deciding the Plagiarist...</p>
+                         <p className="text-white/40 text-2xl uppercase tracking-[0.5em] font-black animate-pulse bg-white/5 px-10 py-3 rounded-full border border-white/5">
+                            {gameState.reveal_target_id ? "The Ink of Fate has dried." : "Fate is deciding the Plagiarist..."}
+                         </p>
                     </div>
                 ) : null}
             </div>
@@ -261,89 +304,56 @@ export default function PublicDisplay() {
             </div>
         )}
 
-        {phase === 'payout' && (
-              <div className="h-screen bg-emerald-950 flex items-center justify-center p-10 overflow-hidden relative">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse" />
-                <div className="max-w-5xl w-full glass rounded-[3rem] p-10 lg:p-14 border border-emerald-400/20 space-y-10 animate-scale-up">
-                    <div className="text-center space-y-2">
-                        <h1 className="text-6xl lg:text-8xl font-black serif italic text-white uppercase tracking-tighter drop-shadow-2xl">The Royal Payout</h1>
-                        <p className="text-emerald-400 text-xl uppercase tracking-[0.5em] font-black drop-shadow-glow">A Gathering to Remember</p>
-                    </div>
-                      <div className="grid grid-cols-2 gap-6">
-                        {players.sort((a,b) => (b.gathering_gold || 0) - (a.gathering_gold || 0)).slice(0, 8).map((p, idx) => (
-                            <div key={p.id} className="flex items-center justify-between p-6 bg-white/5 rounded-2xl border border-white/10 shadow-2xl">
-                                <div className="flex items-center gap-6">
-                                    <span className="text-emerald-400 font-black text-2xl italic">#{idx+1}</span>
-                                    <span className="text-white text-xl font-bold">{p.name} {p.status === 'banished' ? '👻' : ''}</span>
-                                </div>
-                                <div className="text-gold font-mono text-3xl font-black">₹{p.gathering_gold || 0}</div>
-                            </div>
-                        ))}
-                    </div>
-                    
-                    <div className="text-center">
-                    <p className="text-white/20 text-xs uppercase tracking-[0.3em] font-black">End of Information • Shukran</p>
-                    </div>
-                </div>
-            </div>
-        )}
 
         {phase === 'end' && (
-                 <div className="space-y-8 animate-scale-up w-full max-w-5xl">
-                    <div className="text-8xl mb-1 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
-                    <h2 className="text-6xl lg:text-8xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl">
-                    {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
+                 <div className="flex-1 flex flex-col items-center justify-center w-full max-w-6xl animate-scale-up overflow-hidden py-4">
+                    <div className="text-4xl lg:text-6xl mb-2 drop-shadow-[0_0_80px_rgba(255,215,0,0.5)] animate-bounce-slow">🏆</div>
+                    <h2 className="text-3xl lg:text-6xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-2xl text-center leading-tight">
+                        {gameState.winner_faction === 'poets' ? 'The Sukhan-war (Poets) prevail!' : 'The Naqal-baaz (Plagiarists) rule the City!'}
                     </h2>
 
                     {gameState.winner_faction === 'poets' && (
-                        <div className="mt-8 space-y-4 animate-fade-enter-active">
-                            <p className="text-4xl font-serif text-white/80 italic leading-relaxed">
-                                "Saff-e-Matam Na Bichao Ke Sukhan Zinda Hai,<br/>
-                                Ahl-e-Zauq Dekh Lo, Har Lafz-e-Kohan Zinda Hai."
+                        <div className="mt-4 space-y-1 animate-fade-enter-active text-center shrink-0">
+                            <p className="text-lg lg:text-2xl font-serif text-white/80 italic leading-snug">
+                                "Saff-e-Matam Na Bichao Ke Sukhan Zinda Hai, Ahl-e-Zauq Dekh Lo, Har Lafz-e-Kohan Zinda Hai."
                             </p>
-                            <p className="text-sm uppercase tracking-[0.4em] text-gold/40 font-black">
-                                (Do not mourn, for the Word is alive; O people of taste, see that every ancient verse still lives.)
+                            <p className="text-[10px] lg:text-xs uppercase tracking-[0.4em] text-gold/40 font-black">
+                                (Do not mourn, for the Word is alive; the ancient verse lives.)
                             </p>
                         </div>
                     )}
                     
-                    <div className="grid grid-cols-1 gap-4 pt-10">
-                        <div className="flex justify-between items-end border-b border-gold/10 pb-4 mb-4">
-                            <h3 className="text-gold/40 uppercase tracking-[0.5em] font-black text-xs">Final Wealth Distribution</h3>
+                    <div className="w-full mt-4 space-y-4 flex-1 overflow-hidden flex flex-col min-h-0">
+                        <div className="flex justify-between items-center border-b border-gold/10 pb-2 shrink-0">
+                            <h3 className="text-gold/40 uppercase tracking-[0.5em] font-black text-[10px]">Wealth Distribution</h3>
                             <div className="text-right">
-                            <div className="text-[10px] text-white/40 uppercase font-black tracking-widest">Total Eidi Pot</div>
-                            <div className="text-4xl font-black text-white italic serif">₹{gameState.eidi_pot > 0 ? gameState.eidi_pot : (gameState.last_game_pot || 0)}</div>
+                                <span className="text-[10px] text-white/40 uppercase font-black tracking-widest mr-2">Eidi Pot:</span>
+                                <span className="text-2xl font-black text-white italic serif">₹{gameState.eidi_pot > 0 ? gameState.eidi_pot : (gameState.last_game_pot || 0)}</span>
                             </div>
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3 lg:gap-4 overflow-y-auto pr-2 pb-4 scrollbar-hide">
                             {[...players].sort((a, b) => (b.private_gold || 0) - (a.private_gold || 0)).map((p, i) => {
                                 const isWinner = p.role === 'sukhan_war' && p.status === 'alive';
                                 const isPlagiarist = p.role === 'naqal_baaz';
                                 
                                 return (
-                                    <div key={p.id} className={`glass flex items-center justify-between p-6 rounded-2xl border transition-all duration-700 ${isWinner ? 'bg-gold/10 border-gold/40 scale-105 shadow-[0_0_30px_rgba(255,215,0,0.2)]' : 'border-white/5 opacity-60'}`}>
-                                        <div className="flex items-center gap-6">
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl ${i === 0 ? 'bg-gold text-black' : 'bg-white/10 text-white'}`}>
+                                    <div key={p.id} className={`glass flex items-center justify-between p-3 lg:p-4 rounded-xl border transition-all duration-700 ${isWinner ? 'bg-gold/10 border-gold/20' : 'border-white/5 opacity-60'}`}>
+                                        <div className="flex items-center gap-3 lg:gap-4 overflow-hidden">
+                                            <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${i === 0 ? 'bg-gold text-black' : 'bg-white/10 text-white'}`}>
                                                 #{i + 1}
                                             </div>
-                                            <div className="text-left">
-                                                <div className={`text-4xl font-black serif italic ${isWinner ? 'text-white' : 'text-white/60'}`}>{p.name}</div>
-                                                <div className="flex gap-3 items-center mt-1">
-                                                    <span className={`text-[10px] uppercase font-black tracking-widest ${isPlagiarist ? 'text-red-500' : 'text-emerald-500'}`}>{p.role.replace('_', ' ')}</span>
-                                                    <span className="w-1 h-1 rounded-full bg-white/20" />
-                                                    <span className="text-[10px] uppercase font-black tracking-widest text-white/40">{p.status}</span>
+                                            <div className="text-left truncate">
+                                                <div className={`text-lg lg:text-xl font-black serif italic truncate ${isWinner ? 'text-white' : 'text-white/60'}`}>{p.name}</div>
+                                                <div className="flex gap-2 items-center">
+                                                    <span className={`text-[8px] uppercase font-black tracking-widest ${isPlagiarist ? 'text-red-500' : 'text-emerald-500'}`}>{p.role.replace('_', ' ')}</span>
+                                                    <span className="text-[8px] uppercase font-black tracking-widest text-white/20 whitespace-nowrap">{p.status}</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        
-                                        <div className="text-right">
-                                            <div className={`text-5xl font-black italic serif ${isWinner ? 'text-gold' : isPlagiarist && (p.private_gold || 0) > 0 ? 'text-red-500' : 'text-white/40'}`}>
-                                                ₹{p.private_gold || 0}
-                                            </div>
-                                            <div className="text-[10px] uppercase font-black text-white/20 tracking-tighter mt-1">
-                                                {isWinner ? 'Total Eidi + Share' : isPlagiarist ? 'Stolen Black Money' : 'Khazana Secured'}
-                                            </div>
+                                        <div className="text-right shrink-0">
+                                            <div className="text-[8px] uppercase font-black text-gold/60 tracking-widest">Share</div>
+                                            <div className="text-lg lg:text-xl font-mono font-black text-gold">₹{p.private_gold || 0}</div>
                                         </div>
                                     </div>
                                 );
@@ -355,7 +365,45 @@ export default function PublicDisplay() {
 
       </div>
 
-      <footer className="p-8 lg:p-16 border-t border-white/5 flex justify-between items-end bg-black/60 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
+      {phase === 'payout' && (
+        <div className="fixed inset-0 z-[150] bg-crimson-black flex flex-col items-center justify-center p-4 lg:p-12 overflow-hidden">
+            <div className="max-w-6xl w-full space-y-4 lg:space-y-6 animate-fade-enter-active flex flex-col max-h-full">
+                <div className="text-center space-y-4">
+                    <h2 className="text-3xl lg:text-6xl font-black serif text-gold uppercase tracking-tighter italic drop-shadow-[0_0_30px_rgba(255,215,0,0.4)]">
+                        The Final Gathering
+                    </h2>
+                    <div className="h-1 lg:h-2 w-32 lg:w-48 bg-gold/40 mx-auto rounded-full" />
+                    <p className="text-gold/60 text-[10px] lg:text-sm uppercase font-black tracking-[0.4em]">Cumulative Wealth Distribution</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 lg:gap-4 overflow-y-auto pr-2 pb-4 scrollbar-hide py-2 flex-1">
+                    {players.sort((a, b) => (b.gathering_gold || 0) - (a.gathering_gold || 0)).map((p, idx) => (
+                        <div key={p.id} className="glass p-4 lg:p-6 rounded-2xl border border-gold/20 flex items-center justify-between transition-all duration-300">
+                            <div className="flex items-center gap-6 lg:gap-12">
+                                <span className={`text-2xl lg:text-4xl font-black italic ${idx < 3 ? 'text-gold' : 'text-gray-600'}`}>
+                                    #{idx + 1}
+                                </span>
+                                <div className="space-y-1">
+                                    <div className="text-lg lg:text-2xl font-black text-white">{p.name} {p.status === 'banished' ? '👻' : ''}</div>
+                                    <div className="text-xs lg:text-sm text-gray-500 uppercase font-bold tracking-widest">{p.role === 'naqal_baaz' ? 'Plagiarist' : 'Poet'}</div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[10px] uppercase font-black text-gold/40 tracking-widest mb-1">Total Wealth</div>
+                                <div className="text-xl lg:text-3xl font-mono font-black text-gold">₹{p.gathering_gold || 0}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="text-center py-2">
+                    <p className="text-white/20 text-[10px] lg:text-xs italic font-serif">"Wealth is but ink on paper, but a legacy lasts forever."</p>
+                </div>
+            </div>
+        </div>
+      )}
+
+      <footer className="fixed bottom-0 left-0 right-0 p-6 lg:p-12 flex justify-between items-end bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-50">
         <div className="flex flex-col gap-6">
             <div className="flex items-center gap-4">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
