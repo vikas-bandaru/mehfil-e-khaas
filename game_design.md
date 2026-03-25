@@ -16,12 +16,15 @@ The game features a premium, cinematic aesthetic defined by:
 - **Two-Stage Timing:**
     - **60 seconds Preparation:** All players (except Plagiarists) are blindfolded. Plagiarists use this time to view their secret assignment.
     - **90 seconds Solving:** All players open their eyes. The group works together to solve the challenge.
-- **Sabotage:** Plagiarists can secretly trigger a "Sabotage" signal. If verified by the Host, they steal gold from the collective pot into their `private_gold` (Black Money). The signaling process provides immediate feedback to the player, disabling the button and showing a "Signaling..." state to prevent double-clicks.
+- **Sabotage:** Plagiarists can secretly trigger a "Sabotage" signal. If verified by the Host, the mission is considered "Sabotaged" even if it later succeeds.
+    - **The Sabotage Tax:** If a mission succeeds while sabotaged, only **₹1000** is added to the `Eidi Pot` (instead of ₹2000).
+    - **The Plagiarist Heist:** Any Plagiarist who signaled a verified sabotage immediately receives **₹1000** in their `private_gold`, regardless of whether the mission succeeds or fails.
+    - **Visual Feedback:** The signaling process provides immediate feedback, disabling the button and showing a "Signaling..." state to prevent double-clicks.
 
 ### 2. Majlis Phase (The Banishment)
 - **Objective:** Debate and identify the infiltrators.
 - **Banishment:** Players vote on who they suspect to be a Plagiarist. 
-- **Tie-Breaking:** If the vote is tied, the Host utilizes "Sultan's Decree" (manual), "Re-vote," or "Spin the Pen" (random) to decide the fate of the suspects.
+- **Tie-Breaking:** If the vote is tied, the Host utilizes "Sultan's Decree" (manual), "Re-vote," or "Spin the Pen" (random) to decide the fate of the suspects. The public display features a synchronized 5-second pen spin to build cinematic suspense before highlighting the banished suspect.
 - **Outcome:** Banished players enter the "Spirit World" (Spectator State).
 
 ### 3. Night Phase (The Silencing)
@@ -61,4 +64,4 @@ Mehfil-e-Khaas is designed for a full evening of play. A "Gathering" consists of
 | **Infiltrator Action** | The Murder | The Silencing (`Zabaan-bandi`) |
 | **Eliminated Players** | Murders/Banishments | Banished (Spirit World) / Silenced |
 | **The Reward** | Winning Pool | `Eidi Pot` Distribution |
-| **Gathering Goal** | The Full Season | The Gathering (`Gathering Gold`) |
+| **Gathering Goal** | The Full Season | The Gathering (Up to 20 Players) |

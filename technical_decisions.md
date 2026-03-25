@@ -25,7 +25,8 @@ The application is split into three primary entry points:
 - **Decision:** Implemented a "One-Click" state machine for mission outcomes.
 - **Logic:** 
     - `mission_timer_end` acts as a global signal for active missions. Setting it to `null` halts the countdown on all connected clients instantly.
-    - `sabotage_used` (Flag) prevents Plagiarists from signaling twice in one mission, even if the Host clears the visual alert.
+    - `sabotage_triggered` (Flag) persists until mission finalization. It determines if the "Sabotage Tax" (₹1000 reduction in pot gains) applies and triggers the "Plagiarist Heist" (₹1000 reward for signaling plagiarists).
+    - `sabotage_used` (Flag) prevent Plagiarists from signaling twice in one mission.
 
 ## 5. End-Game Wealth Distribution
 - **Decision:** Automated "Liquidation" function with session persistence.
@@ -48,7 +49,10 @@ The application is split into three primary entry points:
 ## 9. Responsive Display Layout
 - **Decision:** Viewport-Locked (`h-screen`) Cinematic Display.
 - **Rationale:** To ensure a "single-glance" experience for public viewing, the `DisplayPage` was optimized to fit all phases (Lobby, Mission, Night, Payout) within a single viewport without scrolling.
-- **Implementation:** Used `overflow-hidden` on the main container and responsive font-scaling (`clamp()`) for the room code and primary titles to maintain legibility on both large screens and mobile browsers.
+- **Implementation:** 
+    - Used `overflow-hidden` on the main container and global font-size reductions (e.g., 32px header, 10px room code labels) to guarantee a scroll-free experience.
+    - Implemented a **5-second state delay** for the banished player highlight to perfectly synchronize with the cinematic Pen of Fate spin animation.
+    - Used `vh` and `lg:` breakpoints for the Pen of Fate container to maintain visual hierarchy across different aspect ratios.
 
 ## 10. Cinematic Animations
 - **Decision:** Customized Marquee Speed.
@@ -95,7 +99,7 @@ We encapsulated the game's state transitions and calculations into reusable util
 - `assignRoles(roomId, manualCount)`: Dynamically calculates the number of Plagiarists based on room size:
     - 4-7 Players: 1 Plagiarist
     - 8-12 Players: 2 Plagiarists
-    - 13+ Players: 3 Plagiarists
+    - 13-20 Players: 3 Plagiarists
   It then shuffles the `players` table and assigns roles accordingly.
 - `startMission(roomId)`: Sets the `mission_timer_end` to now + 150 seconds and resets mission-specific flags like `sabotage_triggered` and `sabotage_used`.
 - `evaluateWinCondition(roomId)`: Checks the remaining alive players. Returns `'poets'` if no Plagiarists remain, or `'plagiarists'` if they equal or outnumber the Poets.

@@ -38,8 +38,7 @@ The application is designed to be played across multiple devices simultaneously:
 
 ## 🕯️ Key Features
 - **The Gathering**: Multi-game session tracking with persistent `Gathering Gold`.
-- **Eidi Pot**: Dynamic collective pot that can be sabotaged by Plagiarists.
-- **Verification Engine**: Players can verify the final pot distribution at the end of each game.
+- **Imperial Scale**: Support for large gatherings of up to **20 players** with dynamic role assignment.
 - **Session Recovery**: Refresh Guard ensures no one loses their role or status.
 
 ## ✨ Thematic Experience

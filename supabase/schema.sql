@@ -184,3 +184,54 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS gathering_gold INTEGER DEFAULT 0 NO
 
 -- 2. Store the final pot of the last game for verification
 ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS last_game_pot INTEGER DEFAULT 0 NOT NULL;
+
+-- Run this in Supabase SQL Editor
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'game_phase' AND e.enumlabel = 'payout') THEN
+        ALTER TYPE game_phase ADD VALUE 'payout';
+    END IF;
+END $$;
+-- Add missing sabotage columns
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS sabotage_used BOOLEAN DEFAULT FALSE;
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS sabotage_triggered BOOLEAN DEFAULT FALSE;
+ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS last_game_pot INTEGER DEFAULT 0 NOT NULL;
+
+-- Ensure the payout phase exists
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'game_phase' AND e.enumlabel = 'payout') THEN
+        ALTER TYPE game_phase ADD VALUE 'payout';
+    END IF;
+END $$;
+-- 1. Ensure columns exist for individual game vs. session wealth
+ALTER TABLE players ADD COLUMN IF NOT EXISTS private_gold INTEGER DEFAULT 0;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS gathering_gold INTEGER DEFAULT 0;
+
+-- 2. Enable Realtime for the payout phase reveal
+ALTER TABLE game_rooms REPLICA IDENTITY FULL;
+
+-- 3. Create a Function for Atomic Liquidation (Optional but Recommended)
+-- This prevents race conditions where two clients try to calculate the pot split simultaneously.
+CREATE OR REPLACE FUNCTION liquidate_gathering_pot(room_uuid UUID, winner_ids UUID[], share_amount INTEGER)
+RETURNS void AS $$
+BEGIN
+    -- Add the share to private gold for winners
+    UPDATE players 
+    SET private_gold = private_gold + share_amount 
+    WHERE id = ANY(winner_ids);
+
+    -- Move all private gold to the session-wide gathering_gold
+    UPDATE players 
+    SET gathering_gold = gathering_gold + private_gold,
+        private_gold = 0
+    WHERE room_id = room_uuid;
+
+    -- Record the final pot value before resetting the room
+    UPDATE game_rooms 
+    SET last_game_pot = eidi_pot,
+        eidi_pot = 0,
+        current_phase = 'lobby'
+    WHERE id = room_uuid;
+END;
+$$ LANGUAGE plpgsql;
