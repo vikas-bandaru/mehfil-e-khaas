@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
 import { usePlayers } from '@/hooks/usePlayers';
 import { useState, useEffect, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function PublicDisplay() {
   const { roomCode } = useParams() as { roomCode: string };
@@ -128,17 +129,37 @@ export default function PublicDisplay() {
       <div className="flex-1 flex flex-col items-center justify-center text-center p-4 lg:p-10 relative">
         
         {phase === 'lobby' && (
-            <div className="space-y-8 animate-fade-enter-active">
+            <div className="space-y-8 animate-fade-enter-active flex flex-col items-center">
                 <div className="text-6xl animate-bounce-slow drop-shadow-[0_0_30px_rgba(255,215,0,0.3)]">🖋️</div>
                 <h2 className="text-3xl lg:text-4xl font-bold serif text-gold italic">Gathering the Poets...</h2>
+                
+                {/* QR Code Holder */}
+                <div className="p-4 bg-white rounded-2xl shadow-[0_0_50px_rgba(255,215,0,0.2)] scale-110 lg:scale-125">
+                    <QRCodeSVG 
+                        value={joinUrl} 
+                        size={180} 
+                        level="H" 
+                        includeMargin={false}
+                        fgColor="#1a0505" // Crimson Black
+                        imageSettings={{
+                            src: "/logo.png", // Fallback if logo exists
+                            x: undefined,
+                            y: undefined,
+                            height: 24,
+                            width: 24,
+                            excavate: true,
+                        }}
+                    />
+                </div>
+
                 <div className="flex gap-4 justify-center">
                     {Array.from({ length: 8 }).map((_, i) => (
                         <div key={i} className={`w-6 h-6 rounded-full border-2 transition-all duration-700 ${players[i] ? 'bg-gold border-gold scale-125 shadow-[0_0_15px_rgba(255,215,0,0.5)]' : 'bg-white/5 border-white/20'}`} />
                     ))}
                 </div>
                 <div className="space-y-2">
-                    <p className="text-white/40 uppercase tracking-[0.3em] font-black text-[10px]">Join the Mehfil at</p>
-                    <p className="text-gold font-mono text-xl lg:text-3xl font-black bg-white/5 px-6 py-3 rounded-xl border border-white/10 select-all cursor-pointer hover:bg-white/10 transition-all">
+                    <p className="text-white/40 uppercase tracking-[0.3em] font-black text-[10px]">Scan to join or visit</p>
+                    <p className="text-gold font-mono text-xl lg:text-3xl font-black bg-white/5 px-6 py-3 rounded-xl border border-white/10 select-all cursor-pointer hover:bg-white/10 transition-all uppercase tracking-tighter">
                         {joinUrl.replace('http://', '').replace('https://', '')}
                     </p>
                 </div>
