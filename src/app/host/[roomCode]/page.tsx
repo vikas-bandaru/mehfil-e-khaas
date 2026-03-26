@@ -1333,7 +1333,7 @@ export default function HostDashboard() {
 
                     <button 
                         onClick={() => potentialWinner ? handleTransition('end') : handleTransition('night')}
-                        disabled={!isBanishmentConfirmed && !potentialWinner} 
+                        disabled={(!isBanishmentConfirmed && !potentialWinner) || (!isVotesLocked && !potentialWinner)} 
                         className="btn-premium w-full bg-white text-black py-6 rounded-2xl border-gray-300 mt-4 text-lg"
                     >
                         {potentialWinner ? 'Reveal Scores (Victory!)' : 'Proceed to Night'}
