@@ -205,6 +205,7 @@ BEGIN
         ALTER TYPE game_phase ADD VALUE 'payout';
     END IF;
 END $$;
+
 -- 1. Ensure columns exist for individual game vs. session wealth
 ALTER TABLE players ADD COLUMN IF NOT EXISTS private_gold INTEGER DEFAULT 0;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS gathering_gold INTEGER DEFAULT 0;
@@ -236,3 +237,5 @@ BEGIN
     WHERE id = room_uuid;
 END;
 $$ LANGUAGE plpgsql;
+
+ALTER TABLE players ADD COLUMN IF NOT EXISTS has_signaled BOOLEAN DEFAULT FALSE;
