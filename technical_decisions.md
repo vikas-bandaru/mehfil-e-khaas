@@ -24,7 +24,8 @@ The application is split into three primary entry points:
 ## 4. Mission Control & Interlocking
 - **Decision:** Implemented a "One-Click" state machine for mission outcomes.
 - **Logic:** 
-    - `mission_timer_end` acts as a global signal for active missions. Setting it to `null` halts the countdown on all connected clients instantly.
+    - `mission_timer_end` acts as a global signal for active missions (150s: 60s prepare + 90s solve). Setting it to `null` halts the countdown on all connected clients instantly.
+    - **Unanimous Sabotage Signaling:** In multi-plagiarist games, the sabotage signal is only valid if **all active plagiarists** signal. This prevents accidental sabotages and forces coordination.
     - `sabotage_triggered` (Flag) persists until mission finalization. It determines if the "Sabotage Tax" (₹1000 reduction in pot gains) applies and triggers the "Plagiarist Heist" (₹1000 reward for signaling plagiarists).
     - `sabotage_used` (Flag) prevent Plagiarists from signaling twice in one mission.
 
@@ -33,8 +34,8 @@ The application is split into three primary entry points:
 - **Rationale:** Upon victory, the `liquidatePot` utility fetch winners and distributes the `eidi_pot`. Crucially, this is immediately added to the player's `gathering_gold` (Total Session Wealth), and the `eidi_pot` is reset to 0 to prevent double-liquidation. The final pot value is stored in `last_game_pot` for collective verification.
 - **Decision:** "Payout Phase" for Gathering Conclusion.
 - **Rationale:** To facilitate a proper ending to a multi-game session, a dedicated `payout` phase was added. This phase locks the room and displays a cumulative leaderboard from `gathering_gold`, ensuring players see their total earnings across all rounds played during the gathering.
-- **Decision:** Robust Reset Logic.
-- **Rationale:** The `resetGame` utility was enhanced with error-handling and a fallback mechanism to clear critical mission state even if schema updates are partially successful. This ensures the room always returns to a playable lobby state.
+- **Decision:** **Tabula Rasa Reset Mechanism.**
+- **Rationale:** The `resetGame` utility ensures a clean slate for the next game round. It clears all game-specific state (votes, signals, mission data) while meticulously preserving `gathering_gold`. It features error-handling with a fallback mechanism to handle partial schema updates.
 
 ## 6. Thematic Components
 - **Spirit World:** A desaturated, zinc-themed UI state for banished players to prevent them from interacting while allowing them to spectate.
@@ -48,16 +49,25 @@ The application is split into three primary entry points:
 
 ## 9. Responsive Display Layout
 - **Decision:** Viewport-Locked (`h-screen`) Cinematic Display.
-- **Rationale:** To ensure a "single-glance" experience for public viewing, the `DisplayPage` was optimized to fit all phases (Lobby, Mission, Night, Payout) within a single viewport without scrolling.
+- **Rationale:** To ensure a "single-glance" experience for public viewing, the `DisplayPage` was optimized to fit all phases within a single viewport.
 - **Implementation:** 
-    - Used `overflow-hidden` on the main container and global font-size reductions (e.g., 32px header, 10px room code labels) to guarantee a scroll-free experience.
-    - Implemented a **5-second state delay** for the banished player highlight to perfectly synchronize with the cinematic Pen of Fate spin animation.
-    - Used `vh` and `lg:` breakpoints for the Pen of Fate container to maintain visual hierarchy across different aspect ratios.
+    - **QR Code Integration:** A high-contrast QR Code is displayed in the lobby for instant player on-boarding, generated dynamically from the current origin.
+    - Used `overflow-hidden` on the main container and global font-size reductions to guarantee a scroll-free experience.
+    - Implemented a **5-second state delay** for the banished player highlight to synchronize with the cinematic Pen of Fate spin animation.
+    - Used `vh` and `lg:` breakpoints for the Pen of Fate container to maintain visual hierarchy.
 
-## 10. Cinematic Animations
-- **Decision:** Customized Marquee Speed.
-- **Rationale:** The "Night Phase" and "Breaking News" marquees were adjusted to a slow, 30-second duration (`animate-marquee-slow`) to maintain a premium, meditative feel consistent with the Royal Nocturne aesthetic.
-- **Interaction Feedback:** The "Signal Sabotage" button on the player client was updated to provide immediate `isSignaling` feedback, disabling the button and changing the label to "Signaling..." to prevent double-clicks and reduce latency anxiety.
+## 10. Host Dashboard Hardening
+- **Decision:** Critical Transition Guards.
+- **Rationale:** To prevent game-breaking skips, the Host Dashboard enforces mandatory actions before advancing phases.
+- **Logic:** 
+    - During **Majlis (Vote Reveal)**, the Sultan must confirm a banishment or resolve a tie before moving to the next phase.
+    - During **Night (Silencing)**, the Sultan must confirm the silenced victim before waking up the court.
+    - Added an **Emergency Reset** button with double-confirmation to recover from unforeseen state stalls.
+
+## 11. Cinematic Animations
+- **Decision:** Synchronized Transition Delays.
+- **Rationale:** Animations like the "Pen of Fate" and "Night Marquee" use timed transitions (e.g., 8s spin, 30s marquee) to create a premium, meditative feel consistent with the Royal Nocturne aesthetic.
+- **Interaction Feedback:** The "Signal Sabotage" button on the player client provides immediate `isSignaling` feedback, disabling the button and changing the label to "Signaling..." to prevent double-clicks.
 
 ### Database Schema Repair (Run in Supabase SQL Editor)
 Execute the following block to ensure all required columns exist for the gathering system and sabotage mechanics:
@@ -93,7 +103,7 @@ BEGIN
     END IF;
 END $$;
 ```
-## 10. Core JavaScript Utilities (`src/lib/game-logic.ts`)
+## 12. Core JavaScript Utilities (`src/lib/game-logic.ts`)
 We encapsulated the game's state transitions and calculations into reusable utility functions:
 
 - `assignRoles(roomId, manualCount)`: Dynamically calculates the number of Plagiarists based on room size:
@@ -107,7 +117,7 @@ We encapsulated the game's state transitions and calculations into reusable util
 - `resetGame(roomId)`: Restores the room to the lobby phase while maintaining session wealth (`gathering_gold`) but resetting current game earnings (`private_gold`) to 0.
 - `advancePhase(roomId, nextPhase)`: Orchestrates global phase transitions and mission selection.
 
-## 11. Project Folder Structure
+## 13. Project Folder Structure
 
 A high-level overview of the repository's organization and the responsibility of each component.
 
