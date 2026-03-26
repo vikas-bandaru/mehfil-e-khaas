@@ -40,6 +40,7 @@ export default function HostDashboard() {
   const [hostName, setHostName] = useState<string | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isBanishmentConfirmed, setIsBanishmentConfirmed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setHostName(localStorage.getItem('playerName'));
@@ -657,6 +658,16 @@ export default function HostDashboard() {
     }
   };
 
+  const handleGoHome = () => {
+    if (phase === 'lobby' || phase === 'end' || phase === 'payout') {
+      router.push('/');
+    } else {
+      if (confirm("A game is currently in progress. Reporting this Mehfil as abandoned?")) {
+        router.push('/');
+      }
+    }
+  };
+
   if (gameLoading || playersLoading) {
     return (
       <div className="min-h-screen bg-crimson-black flex items-center justify-center">
@@ -692,6 +703,13 @@ export default function HostDashboard() {
       {/* HEADER: Room Code & Public View */}
       <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10 gap-4">
         <div className="flex items-center gap-6">
+          <button 
+            onClick={handleGoHome}
+            className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xl hover:bg-white/10 transition-all text-gold/60 hover:text-gold"
+            title="Go to Home"
+          >
+            🏠
+          </button>
           <div className="flex flex-col">
             <div className="text-[10px] uppercase font-black text-gold/40 tracking-widest mb-1">Room Code</div>
             <span className="text-3xl font-black text-gold leading-none">{roomCode}</span>
@@ -704,11 +722,16 @@ export default function HostDashboard() {
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(`${origin}/?code=${roomCode}`);
-                  alert('Link copied to clipboard!');
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
                 }}
-                className="btn-premium bg-white/10 px-3 py-1.5 rounded-lg border-white/20 hover:bg-white/20"
+                className={`btn-premium px-3 py-1.5 rounded-lg border transition-all ${
+                  copied 
+                    ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/40' 
+                    : 'bg-white/10 text-white/80 border-white/20 hover:bg-white/20'
+                }`}
               >
-                Copy
+                {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
           </div>

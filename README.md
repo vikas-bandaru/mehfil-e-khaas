@@ -31,19 +31,21 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 The application is designed to be played across multiple devices simultaneously:
 - **Cinematic Landing Page**: A premium "Royal Nocturne" portal for players and hosts.
 - **Host Setup (`/host/setup`)**: Dedicated flow for the Sultan to host a new Mehfil.
-- **Join Portal (`/join`)**: Streamlined experience for guests to enter the game.
-- **Host Dashboard**: Control the game flow with the Sultan's Teleprompter—a live guide for first-time hosts.
+- **Join Portal (`/join`)**: Streamlined experience for guests to enter the game with clipboard-ready join links.
+- **Host Dashboard**: Control the game flow with the Sultan's Teleprompter—a hardened guide that enforces critical game steps like banishing and silencing.
 - **Player Mobile View**: Each player's private screen, fully optimized for touch with 44px targets and session recovery (Refresh Guard).
-- **Public Display**: The "Source of Truth" showing collective status and cinematic reveals.
+- **Public Display**: The "Source of Truth" featuring a **QR Code for easy joining** and cinematic reveals (including the Pen of Fate).
 
 ## 🕯️ Key Features
 - **The Gathering**: Multi-game session tracking with persistent `Gathering Gold`.
 - **Imperial Scale**: Support for large gatherings of up to **20 players** with dynamic role assignment.
+- **Unanimous Sabotage**: Plagiarists must coordinate—all active plagiarists must signal for a sabotage to be verified.
 - **Session Recovery**: Refresh Guard ensures no one loses their role or status.
+- **Tabula Rasa Reset**: Comprehensive game reset that preserves `Gathering Gold` while clearing all game-specific states.
 
 ## ✨ Thematic Experience
 - **Royal Nocturne Aesthetic**: A premium dark-mode interface with gold accents and elegant typography.
-- **Cinematic Displays**: Viewport-locked public display with responsive font-scaling (`clamp()`) for perfect presentation on any screen.
+- **Cinematic Displays**: Viewport-locked public display with synchronized animations (e.g., the 5-second Pen of Fate spin) and responsive font-scaling.
 - **Atmospheric Animations**: Slow, meditative marquees and smooth glassmorphic transitions.
 - **Immediate Feedback**: Reactive button states with "Signaling..." indicators to ensure a smooth, low-latency feel for players.
 

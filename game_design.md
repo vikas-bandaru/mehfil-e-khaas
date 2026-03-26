@@ -13,29 +13,33 @@ The game features a premium, cinematic aesthetic defined by:
 
 ### 1. Mission Phase (The Poetic Challenge)
 - **Objective:** Poets must complete a logical or creative challenge set by the Sultan.
-- **Two-Stage Timing:**
+- **Mission Timing (150 seconds):**
     - **60 seconds Preparation:** All players (except Plagiarists) are blindfolded. Plagiarists use this time to view their secret assignment.
     - **90 seconds Solving:** All players open their eyes. The group works together to solve the challenge.
-- **Sabotage:** Plagiarists can secretly trigger a "Sabotage" signal. If verified by the Host, the mission is considered "Sabotaged" even if it later succeeds.
-    - **The Sabotage Tax:** If a mission succeeds while sabotaged, only **₹1000** is added to the `Eidi Pot` (instead of ₹2000).
-    - **The Plagiarist Heist:** Any Plagiarist who signaled a verified sabotage immediately receives **₹1000** in their `private_gold`, regardless of whether the mission succeeds or fails.
-    - **Visual Feedback:** The signaling process provides immediate feedback, disabling the button and showing a "Signaling..." state to prevent double-clicks.
+- **Unanimous Sabotage:** In games with multiple Plagiarists, **all active Plagiarists** must signal 'Sabotage' for it to be verified.
+    - **Verification:** Once confirmed by the Host (after a unanimous signal or mission timeout), the mission is considered "Sabotaged".
+    - **The Sabotage Tax:** A successful sabotaged mission adds only **₹1000** to the pot (vs ₹2000).
+    - **The Plagiarist Heist:** Verified signalers receive **₹1000** in `private_gold` immediately.
+    - **Immediate Feedback:** Signaling provides tactile feedback with "Signaling..." button states.
 
 ### 2. Majlis Phase (The Banishment)
-- **Objective:** Debate and identify the infiltrators.
-- **Banishment:** Players vote on who they suspect to be a Plagiarist. 
-- **Tie-Breaking:** If the vote is tied, the Host utilizes "Sultan's Decree" (manual), "Re-vote," or "Spin the Pen" (random) to decide the fate of the suspects. The public display features a synchronized 5-second pen spin to build cinematic suspense before highlighting the banished suspect.
-- **Outcome:** Banished players enter the "Spirit World" (Spectator State).
+- **Objective:** Debate and identify the infiltrators in the court.
+- **Banishment:** Players vote on who to suspect. The Sultan then reveals the tally.
+- **Hardened Tie-Breaking:** If the vote is tied, the Host utilizes:
+    - **Sultan's Decree:** The Host manually selects the banished player.
+    - **Re-vote:** A fresh voting round among the tied suspects.
+    - **Spin the Pen:** A randomized selection with a **synchronized 8-second cinematic animation** on the Public Display.
+- **Outcome:** Banished players enter the "Spirit World" (Spectator State, Zinc-themed UI).
 
 ### 3. Night Phase (The Silencing)
 - **Objective:** Plagiarists choose a target to silence.
 - **The Vote:** Plagiarists cast a secret ballot. The Host confirms the most-voted target.
 - **Silencing:** The victim is "Zabaan-bandi" (Silenced) and is prohibited from speaking or interacting in the next Majlis.
 
-### 3. Payout Phase (The Final Reward)
+### 4. Payout Phase (The Final Reward)
 - **Objective:** Showcase the final wealth accumulated across the entire gathering.
-- **Trigger:** The Host clicks "End Gathering & Pay Out" after any game ends.
-- **Outcome:** The room transitions to a special "Payout" screen showing a session-wide leaderboard ranked by `Gathering Gold`.
+- **The Ceremony:** The Host triggers "End Gathering & Pay Out". The display transitions to a grand leaderboard ranked by `Gathering Gold`.
+- **Outcome:** Survivor statuses are revealed one last time as the Sultan distributes the final Eidi to his favorites.
 
 ## ⚙️ Game Engine Design
 The engine is built on a **State-Driven Sync** model:
