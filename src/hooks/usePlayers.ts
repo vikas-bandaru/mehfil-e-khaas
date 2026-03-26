@@ -37,10 +37,11 @@ export function usePlayers(roomId: string) {
         },
         (payload) => {
           console.log("Real-time Update (players):", payload);
-          // If any player in this room was affected, refetch
-          if (payload.new && (payload.new as any).room_id === roomId) {
+          if (payload.eventType === 'DELETE') {
+            // Refetch on any deletion to ensure we catch room-wide wipes 
+            // where room_id might not be in the 'old' payload
             fetchPlayers();
-          } else if (payload.old && (payload.old as any).room_id === roomId) {
+          } else if (payload.new && (payload.new as any).room_id === roomId) {
             fetchPlayers();
           }
         }

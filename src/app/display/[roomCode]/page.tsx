@@ -2,13 +2,14 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
 import { usePlayers } from '@/hooks/usePlayers';
 import { useState, useEffect, useRef } from 'react';
 
 export default function PublicDisplay() {
   const { roomCode } = useParams() as { roomCode: string };
+  const router = useRouter();
   const { gameState, loading: gameLoading } = useGameState(roomCode);
   const phase = gameState?.current_phase || 'lobby';
   const roomId = gameState?.id;
@@ -16,6 +17,15 @@ export default function PublicDisplay() {
   const [origin, setOrigin] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
   const [showWinnerHighlight, setShowWinnerHighlight] = useState(false);
+
+  useEffect(() => {
+    if (!gameLoading && !gameState) {
+      const timer = setTimeout(() => {
+        router.push('/');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState, gameLoading, router]);
   const hasPlayedRef = useRef(false);
 
   useEffect(() => {

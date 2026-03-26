@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
 import { usePlayers } from '@/hooks/usePlayers';
 import { supabase } from '@/lib/supabase';
@@ -11,10 +11,20 @@ import { Mission } from '@/lib/game-logic';
 
 export default function PlayerClient() {
   const { roomCode } = useParams() as { roomCode: string };
+  const router = useRouter();
   const { gameState, loading: gameLoading, setGameState } = useGameState(roomCode);
   const roomId = gameState?.id;
   const { players, loading: playersLoading } = usePlayers(roomId || '');
   const [playerId, setPlayerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!gameLoading && !gameState) {
+      const timer = setTimeout(() => {
+        router.push('/');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState, gameLoading, router]);
   const [showRole, setShowRole] = useState(false);
 
   useEffect(() => {
@@ -182,7 +192,7 @@ export default function PlayerClient() {
   );
 
   const isAlive = me.status === 'alive';
-  const isBlindfoldPhase = timeLeft > 90;
+  const isBlindfoldPhase = (timeLeft > 90) || (gameState?.mission_timer_end && (new Date(gameState.mission_timer_end).getTime() > Date.now() + 90000));
 
   const handleVote = async (targetId: string, roundType: 'majlis' | 'night' = 'majlis') => {
     if (votedId || !roomId || me.status !== 'alive') return;

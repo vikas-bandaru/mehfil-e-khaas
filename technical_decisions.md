@@ -106,3 +106,35 @@ We encapsulated the game's state transitions and calculations into reusable util
 - `liquidatePot(roomId)`: A critical end-game function that divides the `eidi_pot` among surviving Poets and updates their `private_gold` (Private Khazana).
 - `resetGame(roomId)`: Restores the room to the lobby phase while maintaining session wealth (`gathering_gold`) but resetting current game earnings (`private_gold`) to 0.
 - `advancePhase(roomId, nextPhase)`: Orchestrates global phase transitions and mission selection.
+
+## 11. Project Folder Structure
+
+A high-level overview of the repository's organization and the responsibility of each component.
+
+### Hierarchy & Descriptions
+
+- **`src/app/`**: Root of the App Router, following the `folder/page.tsx` convention.
+    - `page.tsx`: Landing page with game overview and join/host navigation.
+    - `layout.tsx`: Global root layout and metadata configuration.
+    - `globals.css`: "Royal Nocturne" theme variables and Tailwind CSS styles.
+    - `host/`:
+        - `setup/page.tsx`: Room creation and configuration.
+        - `[roomCode]/page.tsx`: The Host Dashboard for game-state control.
+    - `play/[roomCode]/page.tsx`: Mobile-first player interface for in-game actions.
+    - `display/[roomCode]/page.tsx`: Read-only cinematic view for the audience.
+    - `join/page.tsx`: Simple entry point for players to join existing rooms.
+    - `test-pen/page.tsx`: Animation testing page for the "Pen of Fate."
+- **`src/hooks/`**: Custom React hooks for state management and Supabase interaction.
+    - `useGameState.ts`: Manages real-time synchronization of the current room's state from the `game_rooms` table.
+    - `usePlayers.ts`: Manages real-time synchronization of the list of players and their statuses.
+- **`src/lib/`**: Shared utilities and business logic.
+    - `game-logic.ts`: The central game engine that handles phase transitions, role assignments, eidi distribution, and win-condition evaluations.
+    - `supabase.ts`: Configuration and initialization of the Supabase client.
+- **`supabase/`**: Database infrastructure.
+    - `schema.sql`: Contains the complete PostgreSQL schema, including tables (`game_rooms`, `players`, `night_votes`), custom Enums, and RLS policies.
+- **`public/`**: Static assets, including brand icons, SVGs, and graphics used throughout the UI.
+- **`Root Directory`**: Configuration and documentation.
+    - `README.md`: Project overview and development setup.
+    - `game_design.md`: Comprehensive guide to game rules, lore, and mechanics.
+    - `technical_decisions.md`: This document, outlining architectural and design choices.
+    - `package.json`: Project dependencies and scripts.
