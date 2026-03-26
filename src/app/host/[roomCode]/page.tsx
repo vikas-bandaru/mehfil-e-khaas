@@ -40,6 +40,7 @@ export default function HostDashboard() {
   const [hostName, setHostName] = useState<string | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isBanishmentConfirmed, setIsBanishmentConfirmed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setHostName(localStorage.getItem('playerName'));
@@ -704,11 +705,16 @@ export default function HostDashboard() {
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(`${origin}/?code=${roomCode}`);
-                  alert('Link copied to clipboard!');
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
                 }}
-                className="btn-premium bg-white/10 px-3 py-1.5 rounded-lg border-white/20 hover:bg-white/20"
+                className={`btn-premium px-3 py-1.5 rounded-lg border transition-all ${
+                  copied 
+                    ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/40' 
+                    : 'bg-white/10 text-white/80 border-white/20 hover:bg-white/20'
+                }`}
               >
-                Copy
+                {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
           </div>
