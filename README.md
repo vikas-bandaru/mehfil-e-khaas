@@ -49,6 +49,13 @@ The Sultan has invited his most loyal poets (**Sukhan-war**) to a grand gatherin
 1. Open `/display/[roomCode]` on a large screen or TV.
 2. This view is the **Source of Truth**, showing cinematic reveals, mission timers, and the synchronized **Pen of Fate** animation.
 
+## 📖 Documentation
+
+For a deeper dive into the mechanics and architecture of Mehfil-e-Khaas, please refer to the following documents:
+
+- **[Game Design Guide](file:///Users/vikas/Documents/project_experiments/mehfil-e-khaas/game_design.md)**: A comprehensive breakdown of game rules, lore, the synchronized state machine, and data flow diagrams.
+- **[Technical Decisions](file:///Users/vikas/Documents/project_experiments/mehfil-e-khaas/technical_decisions.md)**: Detailed rationale behind our architectural choices, database schema repairs, and component responsibilities.
+
 ## 🛠️ Technical Architecture
 - **Framework**: Next.js (App Router)
 - **State Sync**: **Supabase Realtime** (Hub-and-Spoke model).
