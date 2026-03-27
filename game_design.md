@@ -41,21 +41,104 @@ The game features a premium, cinematic aesthetic defined by:
 - **The Ceremony:** The Host triggers "End Gathering & Pay Out". The display transitions to a grand leaderboard ranked by `Gathering Gold`.
 - **Outcome:** Survivor statuses are revealed one last time as the Sultan distributes the final Eidi to his favorites.
 
-## ⚙️ Game Engine Design
-The engine is built on a **State-Driven Sync** model:
-- **Global Phase Manager:** A single `current_phase` flag in the database dictates the UI layout for all participants.
-- **Persistent Wealth Engine:** `Private Gold` tracks individual earnings (stolen or awarded), while the `Eidi Pot` tracks the collective pool and potential shares.
-- **Session Resilience (Refresh Guard):** Identity (`playerId`) and role reveal status are anchored in `localStorage`, allowing the engine to re-sync a player's exact state (including Silenced or Banished views) after a browser refresh.
-- **Liquidation Logic:** A dedicated function computes and distributes the remaining pot to all surviving Poets upon victory. This function also moves `private_gold` into `gathering_gold` (Cumulative Total) before resetting the game.
+## ⚙️ Game Engine & Architecture
 
-## 🏛️ The Gathering (Multi-Game Session)
-Mehfil-e-Khaas is designed for a full evening of play. A "Gathering" consists of multiple games played with the same group.
+The Mehfil-e-Khaas engine is built on a **State-Driven Sync** model, prioritizing real-time consistency and session resilience.
 
-- **Session Wealth (`Gathering Gold`):** Total wealth accumulated across all games in a room. This is the persistent score that defines the ultimate winners of the evening.
-- **Game Wealth (`Private Gold`):** Wealth earned within a single game through missions or sabotages. This is converted into "Session Wealth" at the end of each game and then reset.
-- **Pot Share:** At the end of each game, the remaining `Eidi Pot` is liquidated and shared with the winning faction, becoming part of their cumulative Session Wealth.
-- **Verification:** The final pot value from the last game (`Last Game Pot`) is stored so players can verify the distribution was accurate even after the pot is reset for a new round.
-- **End of Gathering:** When the Host decides to conclude the evening, they transition to the `Payout` phase to reveal the final Sultan's favorites.
+### 1. The Synchronized State Machine
+The core of the game is a **Finite State Machine (FSM)** where the `game_rooms.current_phase` acts as the global state controller. All views (Host, Player, Display) are reactive to this single source of truth.
+
+```mermaid
+stateDiagram-v2
+    [*] --> lobby: Room Created
+    lobby --> reveal: Host Starts Game
+    reveal --> mission: Preparation Ends
+    mission --> majlis: Mission Timeout / Verified
+    majlis --> night: Banishment Confirmed
+    night --> majlis: Silence Finalized
+    majlis --> end: Win Condition Met
+    end --> payout: Sultan Decrees
+    payout --> lobby: Reset Game
+    payout --> [*]: Close Gathering
+```
+
+### 2. Data Flow Model (DFD Context)
+The project utilizes a **Unidirectional Data Flow** pattern mediated by Supabase.
+
+- **Process A: Host Controls**: The Host Dashboard sends commands to the `game-logic.ts` utility layer, which performs atomic mutations on the `game_rooms` and `players` tables.
+- **Process B: Player Actions**: Player interactions (Voting, Sabotage Signaling) are captured as record inserts in the `votes`/`night_votes` tables or direct updates to the `players` table.
+- **Process C: Real-time Broadcasting**: Supabase Postgres CDC (Change Data Capture) detects table mutations and broadcasts the "New/Old" payload to all subscribed clients via WebSockets.
+- **Process D: State Reconciliation**: Client hooks (`useGameState`, `usePlayers`) receive the broadcast, update local React state, and trigger UI re-renders.
+
+```mermaid
+sequenceDiagram
+    participant H as Host Dashboard
+    participant S as Supabase (DB + Realtime)
+    participant P as Player Client
+    participant D as Public Display
+
+    H->>S: Update current_phase to 'mission'
+    S-->>S: Broadcast Table 'mission' Trigger
+    S->>P: CDC Event: New Phase 'mission'
+    S->>D: CDC Event: New Phase 'mission'
+    P->>P: Show Mission Prep UI
+    D->>D: Show Cinematic Mission Intro
+    P->>S: Insert 'Sabotage' Signal
+    S->>H: CDC Event: Signaler Count Updated
+```
+
+### 3. Database Interaction Protocols
+To facilitate **Sequence Diagram** and **State Diagram** design, the following interaction patterns are standardized:
+
+#### Phase Transitions (Host-Driven)
+All phase advances clear the `mission_timer_end` and `sabotage_triggered` flags globally to prevent state leakage between rounds.
+- **SQL Action**: `UPDATE game_rooms SET current_phase = 'new_phase', mission_timer_end = NULL ...`
+
+#### The Sabotage Heist (Coordinated Sync)
+This is a critical multi-step flow requiring verification:
+1.  **Signal**: Plagiarists update `players.has_signaled = TRUE`.
+2.  **Verify**: The Host Dashboard monitors the count. If `COUNT(signaled_plagiarists) == Total Plagiarists`, the `sabotage_triggered` flag in `game_rooms` is set to `TRUE`.
+3.  **Heist**: Upon mission finalization, if `sabotage_triggered` is TRUE, the software subtracts ₹1000 from the `eidi_pot` gain and adds ₹1000 to each signaling Plagiarist's `private_gold`.
+
+#### Liquidation Protocol (End-of-Game)
+- **Calculation**: Utility fetches `eidi_pot` and counts surviving winners.
+- **Distribution**: `players.private_gold += (Pot / WinnerCount)`.
+- **Accumulation**: `players.gathering_gold += players.private_gold`.
+- **Cleanup**: `players.private_gold = 0`, `game_rooms.eidi_pot = 0`.
+
+## 🗂️ Project Folder Structure
+
+A high-level overview of the repository's organization and the responsibility of each component:
+
+- **`src/app/`**: Root of the App Router.
+    - `page.tsx`: Landing page with game overview.
+    - `host/`: Setup and Host Dashboard for state control.
+    - `play/`: Mobile-first player interface for in-game actions.
+    - `display/`: Read-only cinematic view for the audience.
+    - `join/`: Entry point for players to join existing rooms.
+- **`src/hooks/`**: Custom React hooks for state management.
+    - `useGameState.ts`: Manages real-time sync of the `game_rooms` table.
+    - `usePlayers.ts`: Manages real-time sync of the `players` table.
+- **`src/lib/`**: Shared utilities and business logic.
+    - `game-logic.ts`: Central engine handling transitions, roles, and wealth.
+    - `supabase.ts`: Supabase client configuration.
+- **`supabase/`**: Database infrastructure.
+    - `schema.sql`: PostgreSQL schema (Tables, Enums, RLS Policies).
+- **`public/`**: Static brand assets (icons, SVGs).
+
+## 📊 Data Architecture (Entity Model)
+
+The game state is managed through the following core entities in `schema.sql`:
+
+- **`game_rooms`**: Global metadata (`current_phase`, `eidi_pot`, `room_code`, `last_game_pot`).
+- **`players`**: Participant state (`role`, `status`, `private_gold`, `gathering_gold`, `has_signaled`).
+- **`missions`**: Static challenge data including `secret_sabotage` instructions and `host_answer_key`.
+- **`votes` / `night_votes`**: Transactional records for banishments and silencing actions.
+
+### Wealth Engine
+- **`private_gold`**: Wealth earned within a single game (Mission rewards or Sabotage heists).
+- **`gathering_gold`**: Persistent wealth accumulated across multiple games in a session.
+- **`eidi_pot`**: The collective pool, liquidated and distributed to winning survivors via the `liquidatePot` utility at game end.
 
 ## 🏰 Parallels with "The Traitors"
 
