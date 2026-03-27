@@ -1,56 +1,67 @@
-# Mehfil-e-Khaas: Social Deduction Poetry Game
+# 🕯️ Mehfil-e-Khaas: Social Deduction Game Engine
 
-A real-time, multi-platform social deduction game set in a poetic gathering in Hyderabad. Inspired by "The Traitors," players take on roles as Poets (`Sukhan-war`) or Plagiarists (`Naqal-baaz`) to compete for the Sultan's Eidi.
+**Mehfil-e-Khaas** is a premium, real-time social deduction game engine set in the atmospheric landscape of a historical Hyderabadi poetic gathering. Inspired by modern social deduction classics like *The Traitors*, this platform enables groups of up to 20 players to engage in a high-stakes battle of wits, creative challenges, and professional deception.
+
+> [!IMPORTANT]
+> **Aesthetically Premium**: Designed with the "Royal Nocturne" theme, featuring deep charcoal backgrounds, gold accents, and elegant serif typography to evoke a cinematic experience.
+
+---
+
+## 🎭 The Concept
+The Sultan has invited his most loyal poets (**Sukhan-war**) to a grand gathering, offering a collective bounty (**Eidi Pot**). However, **Plagiarists** (**Naqal-baaz**) have infiltrated the court. Their goal is simple: sabotage the Sultan's missions, steal the wealth for themselves, and remain undetected.
 
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
 - **Node.js**: v18 or later.
-- **Supabase**: Access to a project with `game_rooms`, `players`, `votes`, and `night_votes` tables.
+- **Supabase Account**: Required for real-time state synchronization.
 
-### 2. Environment Variables
-Create a `.env.local` file in the root directory and add your Supabase credentials:
-```env
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
+### 2. Local Setup
+1. **Clone & Install**:
+   ```bash
+   npm install
+   ```
+2. **Environment Configuration**: Create a `.env.local` file:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_project_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   ```
+3. **Database Setup**: Execute the contents of `supabase/schema.sql` in your Supabase SQL Editor.
+4. **Launch**:
+   ```bash
+   npm run dev
+   ```
 
-### 3. Installation
-```bash
-npm install
-```
+## 🕹️ How to Play
 
-### 4. Running the Application
-```bash
-# Start the development server
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+### 🕌 For the Host (The Sultan)
+1. Navigate to `/host/setup` to create a new gathering.
+2. Share the generated **Room Code** or the direct join link with your guests.
+3. Use the **Host Dashboard** to advance the game through its phases (Lobby, Mission, Majlis, Night).
+4. **Hardened Transitions**: The dashboard enforces mandatory actions (like confirming a banishment) before the game can progress.
 
-## 🎭 Roles & Access
-The application is designed to be played across multiple devices simultaneously:
-- **Cinematic Landing Page**: A premium "Royal Nocturne" portal for players and hosts.
-- **Host Setup (`/host/setup`)**: Dedicated flow for the Sultan to host a new Mehfil.
-- **Join Portal (`/join`)**: Streamlined experience for guests to enter the game with clipboard-ready join links.
-- **Host Dashboard**: Control the game flow with the Sultan's Teleprompter—a hardened guide that enforces critical game steps like banishing and silencing.
-- **Player Mobile View**: Each player's private screen, fully optimized for touch with 44px targets and session recovery (Refresh Guard).
-- **Public Display**: The "Source of Truth" featuring a **QR Code for easy joining** and cinematic reveals (including the Pen of Fate).
+### 📜 For the Players (The Poets & Plagiarists)
+1. Join via the direct link or enter the code at `/join`.
+2. **Session Recovery**: Don't worry about signal drops—the "Refresh Guard" will automatically restore your role and status upon reconnection.
+3. **Unanimous Sabotage**: As a Plagiarist, you must coordinate. A sabotage is only verified if *all* active plagiarists signal for it.
 
-## 🕯️ Key Features
-- **The Gathering**: Multi-game session tracking with persistent `Gathering Gold`.
-- **Imperial Scale**: Support for large gatherings of up to **20 players** with dynamic role assignment.
-- **Unanimous Sabotage**: Plagiarists must coordinate—all active plagiarists must signal for a sabotage to be verified.
-- **Session Recovery**: Refresh Guard ensures no one loses their role or status.
-- **Tabula Rasa Reset**: Comprehensive game reset that preserves `Gathering Gold` while clearing all game-specific states.
+### 🏛️ For the Public Display
+1. Open `/display/[roomCode]` on a large screen or TV.
+2. This view is the **Source of Truth**, showing cinematic reveals, mission timers, and the synchronized **Pen of Fate** animation.
 
-## ✨ Thematic Experience
-- **Royal Nocturne Aesthetic**: A premium dark-mode interface with gold accents and elegant typography.
-- **Cinematic Displays**: Viewport-locked public display with synchronized animations (e.g., the 5-second Pen of Fate spin) and responsive font-scaling.
-- **Atmospheric Animations**: Slow, meditative marquees and smooth glassmorphic transitions.
-- **Immediate Feedback**: Reactive button states with "Signaling..." indicators to ensure a smooth, low-latency feel for players.
+## 🛠️ Technical Architecture
+- **Framework**: Next.js (App Router)
+- **State Sync**: **Supabase Realtime** (Hub-and-Spoke model).
+- **Styling**: Vanilla CSS with a custom design system.
+- **Data Integrity**: Postgres CDC (Change Data Capture) ensures every device stays in perfect sync.
 
-## 🛠️ Tech Stack
-- **Framework**: Next.js 16+ (App Router, Turbopack)
-- **Database/Real-time**: Supabase
-- **Styling**: Vanilla CSS (Premium "Royal Nocturne" System)
-- **State Management**: React Hooks + Supabase Realtime Subscriptions
+## 🤝 Contributing
+We welcome contributions that improve the engine logic, UI polish, or developer experience!
+
+1. **Architecture Research**: Read `game_design.md` for a deep dive into the state machine and data flow.
+2. **Technical Decisions**: Check `technical_decisions.md` to understand the *why* behind our core abstractions.
+3. **Branching**: Please create a feature branch for any significant changes.
+
+---
+
+*Set the stage, light the candles, and let the gathering begin.*
